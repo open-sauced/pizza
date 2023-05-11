@@ -1,5 +1,5 @@
 # pizza
-This is an engine that sources git commits and turns them to insights
+This is an engine that sources git commits and turns them to insights. Ideally this will be useful for any open source maintainer trying to get insight into their open source. 
 
 <img width="1350" alt="Screen Shot 2023-05-11 at 8 46 18 AM" src="https://github.com/open-sauced/pizza/assets/5713670/b91989d8-df6d-4631-8d7d-3089b76ee113">
 
