@@ -12,6 +12,14 @@ lint:
 test:
 	go test -v ./...
 
+run:
+	go run main.go
+
 build:
 	docker build . -t pizza-oven:latest
 
+setup-test-env:
+	./hack/setup.sh
+
+teardown-test-env:
+	kind delete cluster --name opensauced-pizza
