@@ -1,10 +1,7 @@
 name: Release pizza image
 
 on:
-  workflow_dispatch: # for testing
   push:
-    branches:
-      - main
     tags:
       - 'v*'
 
