@@ -143,8 +143,6 @@ spec:
       - name: pizza-oven
         image: pizza-oven:latest
         imagePullPolicy: IfNotPresent
-        command:
-        - ./pizza-oven
         env:
         - name: DATABASE_PORT
           value: "5432"

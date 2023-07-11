@@ -4,7 +4,7 @@ lint:
 	docker run \
 		-t \
 		--rm \
-		-v ./:/app \
+		-v /usr/bin/pizza-oven:/app \
 		-w /app \
 		golangci/golangci-lint:v1.53.3 \
 		golangci-lint run -v

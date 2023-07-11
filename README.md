@@ -78,6 +78,7 @@ there is a convenience script that can be invoked with `make setup-test-env` whi
 
 In order to run this setup script, you will _also_ need:
 - Kubectl
+- helm
 - Kind
 - The psql command line tool
 
