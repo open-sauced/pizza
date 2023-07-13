@@ -1,10 +1,12 @@
+ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+
 all: lint test build
 
 lint:
 	docker run \
 		-t \
 		--rm \
-		-v /usr/bin/pizza-oven:/app \
+		-v "${ROOT_DIR}/:/app" \
 		-w /app \
 		golangci/golangci-lint:v1.53.3 \
 		golangci-lint run -v
