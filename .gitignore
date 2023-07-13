@@ -1,0 +1,5 @@
+# This is where the "make local" target drops build artifacts
+build/
+
+# explicitly ignore env files to ensure secrets aren't being accidentally committed
+.env
