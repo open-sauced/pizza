@@ -1,3 +1,5 @@
+.PHONY: all lint test run local build setup-test-env teardown-test-env
+
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
 all: lint test build
@@ -16,6 +18,9 @@ test:
 
 run:
 	go run main.go
+
+local:
+	go build -o build/pizza-oven main.go
 
 build:
 	docker build . -t pizza-oven:latest
