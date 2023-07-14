@@ -12,32 +12,28 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/storage/memory"
+	"go.uber.org/zap"
+
 	"github.com/open-sauced/pizza/oven/pkg/database"
 	"github.com/open-sauced/pizza/oven/pkg/insights"
-	"go.uber.org/zap"
+	"github.com/open-sauced/pizza/oven/pkg/providers"
 )
 
 // PizzaOvenServer provides a leveled logger for use during serving requests
 // and a PizzaOvenDbHanlder for accessing a sql pool of connections.
 type PizzaOvenServer struct {
-	Logger    *zap.SugaredLogger
-	PizzaOven *database.PizzaOvenDbHandler
+	Logger           *zap.SugaredLogger
+	PizzaOven        *database.PizzaOvenDbHandler
+	PizzaGitProvider providers.GitRepoProvider
 }
 
 // NewPizzaOvenServer returns a PizzaOvenServer with a new leveled logger
 // which uses the provided PizzaOvenHandler for db connections
-func NewPizzaOvenServer(dbHandler *database.PizzaOvenDbHandler) *PizzaOvenServer {
-	logger, err := zap.NewProduction()
-	if err != nil {
-		log.Fatalf("Could not initiate zap logger: %v", err)
-	}
-	sugarLogger := logger.Sugar()
-	sugarLogger.Infof("initiated zap logger with level: %d", sugarLogger.Level())
-
+func NewPizzaOvenServer(dbHandler *database.PizzaOvenDbHandler, provider providers.GitRepoProvider, sugarLogger *zap.SugaredLogger) *PizzaOvenServer {
 	return &PizzaOvenServer{
-		Logger:    sugarLogger,
-		PizzaOven: dbHandler,
+		Logger:           sugarLogger,
+		PizzaOven:        dbHandler,
+		PizzaGitProvider: provider,
 	}
 }
 
@@ -86,11 +82,11 @@ func (p PizzaOvenServer) pingHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func (p PizzaOvenServer) processRepository(repo string) error {
+func (p PizzaOvenServer) processRepository(repoURL string) error {
 	var err error
 
 	insight := insights.CommitInsight{
-		RepoURLSource: repo,
+		RepoURLSource: repoURL,
 		AuthorEmail:   "",
 		Hash:          "",
 		Date:          time.Time{},
@@ -110,32 +106,44 @@ func (p PizzaOvenServer) processRepository(repo string) error {
 		}
 	}
 
-	p.Logger.Debugf("Cloning repo into memory: %s", insight.RepoURLSource)
-	inMemRepo, err := git.Clone(memory.NewStorage(), nil, &git.CloneOptions{
-		URL: repo,
-	})
+	p.Logger.Debugf("Getting repo via configured git provider: %s", insight.RepoURLSource)
+
+	// Use the configured git provider to get the repo
+	providedRepo, err := p.PizzaGitProvider.FetchRepo(repoURL)
+	if err != nil {
+		return err
+	}
+	defer providedRepo.Done()
+
+	gitRepo := providedRepo.GetRepo()
+
+	p.Logger.Debugf("Inspecting the head of the git repo: %s", insight.RepoURLSource)
+	ref, err := gitRepo.Head()
 	if err != nil {
 		return err
 	}
 
-	p.Logger.Debugf("Inspecting the head of the in memory repo: %s", insight.RepoURLSource)
-	ref, err := inMemRepo.Head()
+	p.Logger.Debugf("Getting last commit in DB: %s", insight.RepoURLSource)
+	latestCommitDate, err := p.PizzaOven.GetLastCommit(repoID)
 	if err != nil {
 		return err
 	}
+
+	p.Logger.Debugf("Querying commits since: %s", latestCommitDate.String())
 
 	// Git shortlog options to display summary and email starting at HEAD
 	gitLogOptions := git.LogOptions{
-		From: ref.Hash(),
+		From:  ref.Hash(),
+		Since: &latestCommitDate,
 	}
 
 	p.Logger.Debugf("Getting commit iterator with git log options: %v", gitLogOptions)
-	commitIter, err := inMemRepo.Log(&gitLogOptions)
+	commitIter, err := gitRepo.Log(&gitLogOptions)
 	if err != nil {
 		return err
 	}
 
-	p.Logger.Debugf("Iterating commits in repository: %v", gitLogOptions)
+	p.Logger.Debugf("Iterating commits in repository: %s", repoURL)
 	err = commitIter.ForEach(func(c *object.Commit) error {
 		// TODO - if the committer and author are not the same, handle both
 		// those users. This is the case where there is a separate committer for
@@ -145,7 +153,7 @@ func (p PizzaOvenServer) processRepository(repo string) error {
 		// the commit as well.
 		insight.AuthorEmail = c.Author.Email
 		insight.Hash = c.Hash.String()
-		insight.Date = c.Committer.When
+		insight.Date = c.Committer.When.UTC()
 
 		p.Logger.Debugf("Inspecting commit: %s %s %s", insight.AuthorEmail, insight.Hash, insight.Date)
 		authorID, err := p.PizzaOven.GetAuthorID(insight)
@@ -178,5 +186,6 @@ func (p PizzaOvenServer) processRepository(repo string) error {
 		return nil
 	})
 
+	p.Logger.Debugf("Finished processing: %s", repoURL)
 	return err
 }

@@ -66,6 +66,8 @@ This will start the go app, connect to your local postgres database
 using your `.env` file or existing environment variables,
 and start accepting requests.
 
+See the `.env.example` file to see what environment variables are expected.
+
 ### Local kubernetes setup
 
 To get a local environment setup with a postgres database without having to start and configure one yourself,
