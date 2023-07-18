@@ -47,6 +47,7 @@ func (p PizzaOvenServer) Run(serverPort string) {
 	defer p.Logger.Sync()
 	p.Logger.Infof("Starting server on port %s", serverPort)
 	http.HandleFunc("/bake", p.handleRequest)
+	http.HandleFunc("/ping", p.pingHandler)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", serverPort), nil))
 }
 
@@ -74,6 +75,14 @@ func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 		p.Logger.Errorf("Could not process repository input: %v with error: %v", r.Body, err)
 		http.Error(w, "Could not process input", http.StatusInternalServerError)
 		return
+	}
+}
+
+func (p PizzaOvenServer) pingHandler(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write([]byte("pong")); err != nil {
+		p.Logger.Errorf("Could not connect to /ping endpoint: %v", err.Error())
+		http.Error(w, "Could not connect, server is down", http.StatusInternalServerError)
 	}
 }
 

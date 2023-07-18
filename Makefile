@@ -1,10 +1,14 @@
+.PHONY: all lint test run local build setup-test-env teardown-test-env
+
+ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+
 all: lint test build
 
 lint:
 	docker run \
 		-t \
 		--rm \
-		-v ./:/app \
+		-v "${ROOT_DIR}/:/app" \
 		-w /app \
 		golangci/golangci-lint:v1.53.3 \
 		golangci-lint run -v
@@ -14,6 +18,9 @@ test:
 
 run:
 	go run main.go
+
+local:
+	go build -o build/pizza-oven main.go
 
 build:
 	docker build . -t pizza-oven:latest
