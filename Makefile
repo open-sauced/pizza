@@ -23,7 +23,7 @@ local:
 	go build -o build/pizza-oven main.go
 
 build:
-	docker build . -t pizza-oven:latest
+	docker buildx bake
 
 setup-test-env:
 	./hack/setup.sh
