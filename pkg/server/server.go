@@ -185,7 +185,7 @@ func (p PizzaOvenServer) processRepository(repo string) error {
 }
 
 // errorResponse: utility to write errors in JSON and send it
-func (p PizzaOvenServer) errorResponse(w http.ResponseWriter, r *http.Request, status int, message any) {
+func (p PizzaOvenServer) errorResponse(w http.ResponseWriter, status int, message any) {
 	env := envelope{"error": message}
 
 	err := p.WriteJSON(w, status, env, nil)
@@ -196,8 +196,8 @@ func (p PizzaOvenServer) errorResponse(w http.ResponseWriter, r *http.Request, s
 }
 
 // failedValidationResponse: custom response to a failed validation
-func (p PizzaOvenServer) failedValidationResponse(w http.ResponseWriter, r *http.Request, errors map[string]string) {
-	p.errorResponse(w, r, http.StatusUnprocessableEntity, errors)
+func (p PizzaOvenServer) failedValidationResponse(w http.ResponseWriter, errors map[string]string) {
+	p.errorResponse(w, http.StatusUnprocessableEntity, errors)
 }
 
 // WriteJson: utility function to write json
