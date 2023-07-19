@@ -15,7 +15,6 @@ import (
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/open-sauced/pizza/oven/pkg/database"
 	"github.com/open-sauced/pizza/oven/pkg/insights"
-	"github.com/open-sauced/pizza/oven/pkg/validator"
 	"go.uber.org/zap"
 )
 
@@ -71,12 +70,6 @@ func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		p.Logger.Errorf("Could not decode request json body: %v with error: %v", r.Body, err)
 		http.Error(w, "Could not decode request body", http.StatusBadRequest)
-		return
-	}
-
-	v := validator.New()
-	if validator.ValidateURL(v, data.URL); !v.Valid() {
-		p.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
@@ -195,7 +188,7 @@ func (p PizzaOvenServer) processRepository(repo string) error {
 func (p PizzaOvenServer) errorResponse(w http.ResponseWriter, r *http.Request, status int, message any) {
 	env := envelope{"error": message}
 
-	err := p.WriteJson(w, status, env, nil)
+	err := p.WriteJSON(w, status, env, nil)
 	if err != nil {
 		p.Logger.Errorf("Could not write JSON, %v")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -208,7 +201,7 @@ func (p PizzaOvenServer) failedValidationResponse(w http.ResponseWriter, r *http
 }
 
 // WriteJson: utility function to write json
-func (p PizzaOvenServer) WriteJson(w http.ResponseWriter, status int, data envelope, headers http.Header) error {
+func (p PizzaOvenServer) WriteJSON(w http.ResponseWriter, status int, data envelope, headers http.Header) error {
 	js, err := json.MarshalIndent(data, "", "\t")
 	if err != nil {
 		return err

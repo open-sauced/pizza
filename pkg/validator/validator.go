@@ -2,15 +2,6 @@
 // to validate data before invoking database queries
 package validator
 
-import (
-	"net/http"
-	"regexp"
-)
-
-var (
-	githubRegex = regexp.MustCompile(`^https://github.com/[\w-]+/[\w-]+$`)
-)
-
 // Validator: type which contains a map of validation errors (error name : string -> error_description : string)
 type Validator struct {
 	Errors map[string]string
@@ -40,22 +31,4 @@ func (v *Validator) CheckConstraint(ok bool, key, message string) {
 	if !ok {
 		v.AddError(key, message)
 	}
-}
-
-func ValidateURL(validator *Validator, url string) {
-	validator.CheckConstraint(url != "", "url", "URL must be provided")
-	validator.CheckConstraint(MatchesGithubURL(url), "url", "The URL provided is not a valid repository")
-	validator.CheckConstraint(checkURLValid(url), "url", "The URL provided does not exists")
-}
-
-func checkURLValid(url string) bool {
-	res, err := http.Head(url)
-	if err != nil || res.StatusCode != http.StatusOK {
-		return false
-	}
-	return true
-}
-
-func MatchesGithubURL(url string) bool {
-	return githubRegex.MatchString(url)
 }
