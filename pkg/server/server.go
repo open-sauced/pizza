@@ -25,6 +25,9 @@ type PizzaOvenServer struct {
 	PizzaOven *database.PizzaOvenDbHandler
 }
 
+// envelope: type for json communications
+type envelope map[string]any
+
 // NewPizzaOvenServer returns a PizzaOvenServer with a new leveled logger
 // which uses the provided PizzaOvenHandler for db connections
 func NewPizzaOvenServer(dbHandler *database.PizzaOvenDbHandler) *PizzaOvenServer {
@@ -179,4 +182,39 @@ func (p PizzaOvenServer) processRepository(repo string) error {
 	})
 
 	return err
+}
+
+// errorResponse: utility to write errors in JSON and send it
+func (p PizzaOvenServer) errorResponse(w http.ResponseWriter, r *http.Request, status int, message any) {
+	env := envelope{"error": message}
+
+	err := p.WriteJson(w, status, env, nil)
+	if err != nil {
+		p.Logger.Errorf("Could not write JSON, %v")
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+// failedValidationResponse: custom response to a failed validation
+func (p PizzaOvenServer) failedValidationResponse(w http.ResponseWriter, r *http.Request, errors map[string]string) {
+	p.errorResponse(w, r, http.StatusUnprocessableEntity, errors)
+}
+
+// WriteJson: utility function to write json
+func (p PizzaOvenServer) WriteJson(w http.ResponseWriter, status int, data envelope, headers http.Header) error {
+	js, err := json.MarshalIndent(data, "", "\t")
+	if err != nil {
+		return err
+	}
+
+	js = append(js, '\n')
+	for key, val := range headers {
+		w.Header()[key] = val
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(js)
+
+	return nil
 }
