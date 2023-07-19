@@ -15,6 +15,7 @@ import (
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/open-sauced/pizza/oven/pkg/database"
 	"github.com/open-sauced/pizza/oven/pkg/insights"
+	"github.com/open-sauced/pizza/oven/pkg/validator"
 	"go.uber.org/zap"
 )
 
@@ -70,6 +71,12 @@ func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		p.Logger.Errorf("Could not decode request json body: %v with error: %v", r.Body, err)
 		http.Error(w, "Could not decode request body", http.StatusBadRequest)
+		return
+	}
+
+	v := validator.New()
+	if validator.ValidateURL(v, data.URL); !v.Valid() {
+		p.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
