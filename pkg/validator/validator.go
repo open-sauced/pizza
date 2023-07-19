@@ -4,7 +4,11 @@ package validator
 
 import (
 	"net/http"
-	"strings"
+	"regexp"
+)
+
+var (
+	githubRegex = regexp.MustCompile(`^https://github.com/[\w-]+/[\w-]+$`)
 )
 
 // Validator: type which contains a map of validation errors (error name : string -> error_description : string)
@@ -40,14 +44,18 @@ func (v *Validator) CheckConstraint(ok bool, key, message string) {
 
 func ValidateURL(validator *Validator, url string) {
 	validator.CheckConstraint(url != "", "url", "URL must be provided")
-	validator.CheckConstraint(strings.HasPrefix(url, "https://github.com/"), "url", "The URL provided is not a valid repository")
+	validator.CheckConstraint(MatchesGithubURL(url), "url", "The URL provided is not a valid repository")
 	validator.CheckConstraint(checkURLValid(url), "url", "The URL provided does not exists")
 }
 
 func checkURLValid(url string) bool {
-	_, err := http.Get(url)
-	if err != nil {
+	res, err := http.Head(url)
+	if err != nil || res.StatusCode != http.StatusOK {
 		return false
 	}
 	return true
+}
+
+func MatchesGithubURL(url string) bool {
+	return githubRegex.MatchString(url)
 }
