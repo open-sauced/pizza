@@ -61,16 +61,16 @@ func NewGitRepoLRUCache(dir string, minFreeGbs uint64) (*GitRepoLRUCache, error)
 
 	err = syscall.Statfs(dir, stats)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching stats for cache directory: %s", err.Error())	
-	} 
+		return nil, fmt.Errorf("error fetching stats for cache directory: %s", err.Error())
+	}
 
-	freeSpace := stats.Bavail * uint64(stats.Bfree)
+	freeSpace := stats.Bavail * uint64(stats.Bsize)
 	minFreeBytes := minFreeGbs * 1024 * 1024 * 1024
 
 	if freeSpace <= minFreeBytes {
 		return nil, fmt.Errorf("minimum free disk space: %d exceeds actual available disk space: %d", minFreeGbs, freeSpace)
 	}
-	
+
 	return &GitRepoLRUCache{
 		minFreeDiskGb: minFreeGbs,
 		dir:           path,
