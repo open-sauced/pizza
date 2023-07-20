@@ -79,7 +79,7 @@ metadata:
 spec:
   teamId: "opensauced"
   volume:
-    size: 2Gi
+    size: 25Gi
   numberOfInstances: 1
   users:
     # The database owner/admin for the pizza database
@@ -157,8 +157,20 @@ spec:
           value: "pizza"
         - name: SERVER_PORT
           value: "8080"
+        - name: GIT_PROVIDER
+          value: "cache"
+        - name: CACHE_DIR
+          value: "/data/cache"
+        - name: MIN_FREE_DISK_GB
+          value: "25"
         ports:
         - containerPort: 8080
+        volumeMounts:
+          - name: pizza-cache
+            mountPath: /data/cache
+      volumes:
+      - name: pizza-cache
+        emptyDir: {}
 EOF
 
     # The pod may take a second to be able to be waited on via kubectl
@@ -199,9 +211,10 @@ echo "Opening port to postgres operator to apply database migrations"
 echo
 forward_postgres_port &
 
-# Sleep for abit so the postgres database has time to initialize and
+# Wait for the postgres cluster to come and up and be ready to accept requests
 # be ready to accept requests and incoming queries
-sleep 10
+sleep 3
+kubectl wait --for=jsonpath='{.status.PostgresClusterStatus}'=Running postgresqls/opensauced-pizza-postgres-cluster
 
 # apply the migrations to the database
 echo

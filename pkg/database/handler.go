@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"time"
 
 	// the injected postgres interface implementations for Go SQL
 	_ "github.com/lib/pq"
@@ -80,6 +81,30 @@ func (p PizzaOvenDbHandler) GetCommitID(repoID int, insight insights.CommitInsig
 
 // InsertCommit inserts a commit based on its commit hash
 func (p PizzaOvenDbHandler) InsertCommit(insight insights.CommitInsight, authorID int, repoID int) error {
-	_, err := p.db.Exec("INSERT INTO commits(commit_hash, user_id, repo_id, commit_date) VALUES($1, $2, $3, $4)", insight.Hash, authorID, repoID, insight.Date)
+	_, err := p.db.Exec("INSERT INTO public.commits(commit_hash, user_id, repo_id, commit_date) VALUES($1, $2, $3, $4)", insight.Hash, authorID, repoID, insight.Date)
 	return err
+}
+
+// GetLastCommit returns time.Time of the last git commit for the given repoID
+func (p PizzaOvenDbHandler) GetLastCommit(repoID int) (time.Time, error) {
+	var dateTime sql.NullTime
+	err := p.db.QueryRow("SELECT commit_date FROM public.commits WHERE commit_date IS NOT NULL AND repo_id=$1 ORDER BY commit_date DESC LIMIT 1", repoID).Scan(&dateTime)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// When no rows are returned, use an empty time.Time struct which
+			// is "the beginning of time"
+			return time.Time{}, nil
+		}
+
+		// If it's an error for anything else, return the error
+		return time.Time{}, err
+	}
+
+	// If the returned date / time is not valid for some reason,
+	// return an empty time struct
+	if !dateTime.Valid {
+		return time.Time{}, nil
+	}
+
+	return dateTime.Time, nil
 }
