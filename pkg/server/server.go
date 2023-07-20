@@ -48,7 +48,8 @@ func (p PizzaOvenServer) Run(serverPort string) {
 }
 
 type reqData struct {
-	URL string `json:"url"`
+	URL  string `json:"url"`
+	Wait bool   `json:"wait,omitempty"`
 }
 
 func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
@@ -66,11 +67,23 @@ func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = p.processRepository(data.URL)
-	if err != nil {
-		p.Logger.Errorf("Could not process repository input: %v with error: %v", r.Body, err)
-		http.Error(w, "Could not process input", http.StatusInternalServerError)
-		return
+	w.WriteHeader(http.StatusAccepted)
+	if data.Wait {
+		err = p.processRepository(data.URL)
+		if err != nil {
+			p.Logger.Errorf("Could not process repository input: %v with error: %v", r.Body, err)
+			http.Error(w, "Could not process input", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		go func() {
+			err = p.processRepository(data.URL)
+			if err != nil {
+				p.Logger.Errorf("Could not process repository input: %v with error: %v", r.Body, err)
+				http.Error(w, "Could not process input", http.StatusInternalServerError)
+				return
+			}
+		}()
 	}
 }
 
