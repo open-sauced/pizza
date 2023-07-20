@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 
 	"github.com/go-git/go-git/v5"
 	"golang.org/x/sys/unix"
@@ -59,6 +60,19 @@ func NewGitRepoLRUCache(dir string, minFreeGbs uint64) (*GitRepoLRUCache, error)
 		return nil, fmt.Errorf("error checking provided cache directory: %s", err.Error())
 	}
 
+	stats := &syscall.Statfs_t{}
+
+	err = syscall.Statfs(dir, stats)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching stats for cache directory: %s", err.Error())	
+	} 
+
+	freeSpace := stats.Bavail * stats.Bfree
+	
+	if freeSpace <= minFreeGbs {
+		return nil, fmt.Errorf("memory limit exceeded for cache directory")
+	}
+	
 	return &GitRepoLRUCache{
 		minFreeDiskGb: minFreeGbs,
 		dir:           path,
