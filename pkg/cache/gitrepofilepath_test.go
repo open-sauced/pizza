@@ -20,7 +20,7 @@ func TestOpenAndFetch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a new LRU cache
-			c, err := NewGitRepoLRUCache(tt.cacheDir, 100)
+			c, err := NewGitRepoLRUCache(tt.cacheDir, 1)
 			if err != nil {
 				t.Fatalf("unexpected err: %s", err.Error())
 			}

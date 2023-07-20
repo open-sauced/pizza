@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 
 	"github.com/go-git/go-git/v5"
 	"golang.org/x/sys/unix"
@@ -49,14 +50,25 @@ type GitRepoLRUCache struct {
 
 // NewGitRepoLRUCache returns a new NewGitRepoLRUCache configured with the
 // destination directory to cache git repos and minimum free gbs
-//
-// TODO - this should probably error if the amount of disk given by minFreeGbs
-// exceeds the actual amount of disk available on the drive (which is a misconfiguration).
 func NewGitRepoLRUCache(dir string, minFreeGbs uint64) (*GitRepoLRUCache, error) {
 	path := filepath.Clean(dir)
 	_, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("error checking provided cache directory: %s", err.Error())
+	}
+
+	stats := &syscall.Statfs_t{}
+
+	err = syscall.Statfs(dir, stats)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching stats for cache directory: %s", err.Error())
+	}
+
+	freeSpace := stats.Bavail * uint64(stats.Bsize)
+	minFreeBytes := minFreeGbs * 1024 * 1024 * 1024
+
+	if freeSpace <= minFreeBytes {
+		return nil, fmt.Errorf("minimum free disk space: %d exceeds actual available disk space: %d", minFreeBytes, freeSpace)
 	}
 
 	return &GitRepoLRUCache{
