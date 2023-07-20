@@ -68,7 +68,7 @@ func NewGitRepoLRUCache(dir string, minFreeGbs uint64) (*GitRepoLRUCache, error)
 	minFreeBytes := minFreeGbs * 1024 * 1024 * 1024
 
 	if freeSpace <= minFreeBytes {
-		return nil, fmt.Errorf("minimum free disk space: %d exceeds actual available disk space: %d", minFreeGbs, freeSpace)
+		return nil, fmt.Errorf("minimum free disk space: %d exceeds actual available disk space: %d", minFreeBytes, freeSpace)
 	}
 
 	return &GitRepoLRUCache{
