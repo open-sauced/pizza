@@ -50,9 +50,6 @@ type GitRepoLRUCache struct {
 
 // NewGitRepoLRUCache returns a new NewGitRepoLRUCache configured with the
 // destination directory to cache git repos and minimum free gbs
-//
-// TODO - this should probably error if the amount of disk given by minFreeGbs
-// exceeds the actual amount of disk available on the drive (which is a misconfiguration).
 func NewGitRepoLRUCache(dir string, minFreeGbs uint64) (*GitRepoLRUCache, error) {
 	path := filepath.Clean(dir)
 	_, err := os.Stat(path)
@@ -67,9 +64,10 @@ func NewGitRepoLRUCache(dir string, minFreeGbs uint64) (*GitRepoLRUCache, error)
 		return nil, fmt.Errorf("error fetching stats for cache directory: %s", err.Error())	
 	} 
 
-	freeSpace := stats.Bavail * stats.Bfree
-	
-	if freeSpace <= minFreeGbs {
+	freeSpace := stats.Bavail * uint64(stats.Bfree)
+	minFreeBytes := minFreeGbs * 1024 * 1024 * 1024
+
+	if freeSpace <= minFreeBytes {
 		return nil, fmt.Errorf("memory limit exceeded for cache directory")
 	}
 	
