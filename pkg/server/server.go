@@ -19,6 +19,12 @@ import (
 	"github.com/open-sauced/pizza/oven/pkg/providers"
 )
 
+// Config provides the configuration set on server startup
+// - Never Evict Repos: Repos that are preserved in cache regardless of LRU policy
+type Config struct {
+	NeverEvictRepos providers.NeverEvictRepos
+}
+
 // PizzaOvenServer provides a leveled logger for use during serving requests
 // and a PizzaOvenDbHanlder for accessing a sql pool of connections.
 type PizzaOvenServer struct {

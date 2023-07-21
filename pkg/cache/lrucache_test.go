@@ -46,25 +46,32 @@ func TestNewGitRepoLRUCache(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		cacheDir string
-		wantErr  bool
+		name            string
+		cacheDir        string
+		wantErr         bool
+		neverEvictRepos map[string]bool
 	}{
 		{
 			name:     "Default case",
 			cacheDir: t.TempDir(),
 			wantErr:  false,
+			neverEvictRepos: map[string]bool{
+				"no-test": true,
+			},
 		},
 		{
 			name:     "Fails when directory doesn't exist",
 			cacheDir: "/should/not/exist",
 			wantErr:  true,
+			neverEvictRepos: map[string]bool{
+				"no-test": true,
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, err := NewGitRepoLRUCache(tt.cacheDir, 1)
+			c, err := NewGitRepoLRUCache(tt.cacheDir, 1, tt.neverEvictRepos)
 			if tt.wantErr && err != nil {
 				return
 			}
@@ -100,6 +107,7 @@ func TestPutGitRepoLRUCache(t *testing.T) {
 		cacheDir              string
 		repos                 []string
 		expectedCacheOrdering []string
+		neverEvictRepos       map[string]bool
 	}{
 		{
 			name:     "Puts repos into cache in sequential order",
@@ -113,6 +121,9 @@ func TestPutGitRepoLRUCache(t *testing.T) {
 				"https://github.com/open-sauced/insights",
 				"https://github.com/open-sauced/pizza-cli",
 				"https://github.com/open-sauced/pizza",
+			},
+			neverEvictRepos: map[string]bool{
+				"no-test": true,
 			},
 		},
 		{
@@ -130,12 +141,15 @@ func TestPutGitRepoLRUCache(t *testing.T) {
 				"https://github.com/open-sauced/insights",
 				"https://github.com/open-sauced/pizza-cli",
 			},
+			neverEvictRepos: map[string]bool{
+				"no-test": true,
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, err := NewGitRepoLRUCache(tt.cacheDir, 1)
+			c, err := NewGitRepoLRUCache(tt.cacheDir, 1, tt.neverEvictRepos)
 			if err != nil {
 				t.Fatalf("unexpected err: %s", err.Error())
 			}
@@ -161,6 +175,7 @@ func TestTryEvict(t *testing.T) {
 		cacheDir              string
 		repos                 []string
 		expectedCacheOrdering []string
+		neverEvictRepos       map[string]bool
 	}{
 		{
 			name:     "Evicts repos when size limit reached",
@@ -171,12 +186,13 @@ func TestTryEvict(t *testing.T) {
 				"https://github.com/open-sauced/insights",
 			},
 			expectedCacheOrdering: []string{},
+			neverEvictRepos:       map[string]bool{},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, err := NewGitRepoLRUCache(tt.cacheDir, 1)
+			c, err := NewGitRepoLRUCache(tt.cacheDir, 1, tt.neverEvictRepos)
 			if err != nil {
 				t.Fatalf("unexpected err: %s", err.Error())
 			}
@@ -213,6 +229,7 @@ func TestGetGitRepoLRUCache(t *testing.T) {
 		expectedCacheOrdering []string
 		wantErr               bool
 		wantNil               bool
+		neverEvictRepos       map[string]bool
 	}{
 		{
 			name:     "Gets queried repo and inserts it to front of cache",
@@ -232,6 +249,9 @@ func TestGetGitRepoLRUCache(t *testing.T) {
 			},
 			wantErr: false,
 			wantNil: false,
+			neverEvictRepos: map[string]bool{
+				"no-test": true,
+			},
 		},
 		{
 			name:     "Returns nothing and no error if repo not in cache",
@@ -251,12 +271,15 @@ func TestGetGitRepoLRUCache(t *testing.T) {
 			},
 			wantErr: false,
 			wantNil: true,
+			neverEvictRepos: map[string]bool{
+				"no-test": true,
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, err := NewGitRepoLRUCache(tt.cacheDir, 1)
+			c, err := NewGitRepoLRUCache(tt.cacheDir, 1, tt.neverEvictRepos)
 			if err != nil {
 				t.Fatalf("unexpected err creating cache: %s", err.Error())
 			}
@@ -300,6 +323,7 @@ func TestGetAndPutConcurrently(t *testing.T) {
 		expectedCacheOrdering []string
 		wantErr               bool
 		wantNil               bool
+		neverEvictRepos       map[string]bool
 	}{
 		{
 			name:     "Gets queried repo and puts it to front of cache",
@@ -321,12 +345,15 @@ func TestGetAndPutConcurrently(t *testing.T) {
 			},
 			wantErr: false,
 			wantNil: false,
+			neverEvictRepos: map[string]bool{
+				"no-test": true,
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, err := NewGitRepoLRUCache(tt.cacheDir, 1)
+			c, err := NewGitRepoLRUCache(tt.cacheDir, 1, tt.neverEvictRepos)
 			if err != nil {
 				t.Fatalf("unexpected err creating cache: %s", err.Error())
 			}

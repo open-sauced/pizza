@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/go-git/go-git/v5"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -46,11 +47,14 @@ type GitRepoLRUCache struct {
 
 	// hm is the hashmap to support the LRU cache behavior
 	hm map[string]*list.Element
+
+	// neverEvictRepos are the repositories that must never be evicted from the LRU cache
+	neverEvictRepos map[string]bool
 }
 
 // NewGitRepoLRUCache returns a new NewGitRepoLRUCache configured with the
 // destination directory to cache git repos and minimum free gbs
-func NewGitRepoLRUCache(dir string, minFreeGbs uint64) (*GitRepoLRUCache, error) {
+func NewGitRepoLRUCache(dir string, minFreeGbs uint64, neverEvictRepos map[string]bool) (*GitRepoLRUCache, error) {
 	path := filepath.Clean(dir)
 	_, err := os.Stat(path)
 	if err != nil {
@@ -72,10 +76,11 @@ func NewGitRepoLRUCache(dir string, minFreeGbs uint64) (*GitRepoLRUCache, error)
 	}
 
 	return &GitRepoLRUCache{
-		minFreeDiskGb: minFreeGbs,
-		dir:           path,
-		dll:           list.New(),
-		hm:            make(map[string]*list.Element),
+		minFreeDiskGb:   minFreeGbs,
+		dir:             path,
+		dll:             list.New(),
+		hm:              make(map[string]*list.Element),
+		neverEvictRepos: neverEvictRepos,
 	}, nil
 }
 
@@ -214,13 +219,23 @@ func (c *GitRepoLRUCache) tryEvict() error {
 			break
 		}
 
+		// Check that the LRU element is not part of neverEvictRepos
+		// If it is, find the nearest LRU not part of neverEvictRepos
+		lruNode := c.dll.Back()
+		for _, isInNeverEvictRepos := c.neverEvictRepos[lruNode.Value.(*GitRepoFilePath).key]; isInNeverEvictRepos; {
+			lruNode = lruNode.Next()
+			if lruNode == nil {
+				return fmt.Errorf("Disk space completely occupied by neverEvictRepos, could not evict")
+			}
+		}
+
 		// Attempt to unlock the individual element
-		c.dll.Back().Value.(*GitRepoFilePath).lock.Lock()
+		lruNode.Value.(*GitRepoFilePath).lock.Lock()
 
 		// Evict least recently used repos
-		os.RemoveAll(c.dll.Back().Value.(*GitRepoFilePath).path)
-		delete(c.hm, c.dll.Back().Value.(*GitRepoFilePath).key)
-		c.dll.Remove(c.dll.Back())
+		os.RemoveAll(lruNode.Value.(*GitRepoFilePath).path)
+		delete(c.hm, lruNode.Value.(*GitRepoFilePath).key)
+		c.dll.Remove(lruNode)
 
 		// Recalculate the free bytes
 		err = unix.Statfs(c.dir, &stat)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
 
 	"github.com/open-sauced/pizza/oven/pkg/database"
 	"github.com/open-sauced/pizza/oven/pkg/providers"
@@ -19,6 +20,8 @@ func main() {
 	var err error
 
 	// Initialize & parse flags
+	var configPath string
+	flag.StringVar(&configPath, "config", "", "path to .yaml file config")
 	debugMode := flag.Bool("debug", false, "run in debug mode")
 	flag.Parse()
 
@@ -59,6 +62,29 @@ func main() {
 	// Initialize the database handler
 	pizzaOven := database.NewPizzaOvenDbHandler(databaseHost, databasePort, databaseUser, databasePwd, databaseDbName)
 
+	// Initializes configuration using a provided yaml file
+	config := &server.Config{NeverEvictRepos: make(map[string]bool)}
+	var configParser struct {
+		NeverEvictRepos []string `yaml:"never-evict-repos"`
+	}
+
+	if configPath != "" {
+		configFile, err := os.ReadFile(configPath)
+		if err != nil {
+			sugarLogger.Fatalf("Could not read yaml configuration file: %s", err.Error())
+		}
+
+		err = yaml.Unmarshal(configFile, &configParser)
+		if err != nil {
+			sugarLogger.Fatalf("Could not unmarshal configuration file: %s", err.Error())
+		}
+
+		for _, repo := range configParser.NeverEvictRepos {
+			config.NeverEvictRepos[repo] = true
+		}
+		sugarLogger.Infof("Configuration for server was set using yaml file")
+	}
+
 	var pizzaGitProvider providers.GitRepoProvider
 	switch gitProvider {
 	case "cache":
@@ -77,7 +103,7 @@ func main() {
 			sugarLogger.Fatalf(": %s", err.Error())
 		}
 
-		pizzaGitProvider, err = providers.NewLRUCacheGitRepoProvider(cacheDir, minFreeDiskUint64, sugarLogger)
+		pizzaGitProvider, err = providers.NewLRUCacheGitRepoProvider(cacheDir, minFreeDiskUint64, sugarLogger, config.NeverEvictRepos)
 		if err != nil {
 			sugarLogger.Fatalf("Could not create a cache git provider: %s", err.Error())
 		}

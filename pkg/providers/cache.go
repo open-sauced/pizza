@@ -9,6 +9,10 @@ import (
 	"github.com/open-sauced/pizza/oven/pkg/cache"
 )
 
+// NeverEvictRepos holds all the repos that must never be evicted in the LRU cache
+// where the key is the URL of the repo
+type NeverEvictRepos map[string]bool
+
 // LRUCacheGitRepoProvider is a git repository provider that uses an internal
 // Least Recently Used cache on disk for loading and querying git repositories.
 // LRUCacheGitRepoProvider implements and statisfies the GitRepoProvider
@@ -21,8 +25,8 @@ type LRUCacheGitRepoProvider struct {
 // NewLRUCacheGitRepoProvider returns a new LRUCacheGitRepoProvider using the
 // configured cache directory and sets the minimum amount of free disk for the
 // cache to keep.
-func NewLRUCacheGitRepoProvider(cacheDir string, minFreeDisk uint64, l *zap.SugaredLogger) (GitRepoProvider, error) {
-	cache, err := cache.NewGitRepoLRUCache(cacheDir, minFreeDisk)
+func NewLRUCacheGitRepoProvider(cacheDir string, minFreeDisk uint64, l *zap.SugaredLogger, neverEvictRepos NeverEvictRepos) (GitRepoProvider, error) {
+	cache, err := cache.NewGitRepoLRUCache(cacheDir, minFreeDisk, neverEvictRepos)
 	if err != nil {
 		return nil, fmt.Errorf("could not initialize a new LRU cache: %s", err.Error())
 	}
