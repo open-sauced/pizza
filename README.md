@@ -1,19 +1,26 @@
-# pizza
-This is an engine that sources git commits and turns them to insights. Ideally this will be useful for any open source maintainer trying to get insight into their open source. 
-
-<img width="1350" alt="Screen Shot 2023-05-11 at 8 46 18 AM" src="https://github.com/open-sauced/pizza/assets/5713670/b91989d8-df6d-4631-8d7d-3089b76ee113">
-
-## Scope
-Build a docker container clones a repo and stores the contributors and their contributions (commits) in a relational tables. This data should be store in a postgres database (😃). 
-
-## Bonus
-- Make this work with orchestration that fetches the latest data on a cron every hour.
-- Add a queue to assist in fetch content without rate limiting.
-- Add the ability to fetch all repos in an org.
-- Visualize this data somehow.
-
-## Gotchas
-- Large repos like k8s or linux will trip `git clone` the rate limiter if done multiple times in an hour. How would you account for fetching large repos with lots of data?
+<div align="center">
+  <br>
+  <img alt="Open Sauced" src="https://i.ibb.co/7jPXt0Z/logo1-92f1a87f.png" width="300px">
+  <h1>🍕 Pizza Oven Micro-service 🍕</h1>
+  <strong>A Go micro-service that sources git commits from any arbitrary git repo and indexes them into a postgres database.</strong>
+  <br>
+</div>
+<br>
+<p align="center">
+  <img src="https://img.shields.io/github/languages/code-size/open-sauced/pizza" alt="GitHub code size in bytes">
+  <a href="https://github.com/open-sauced/pizza/issues">
+    <img src="https://img.shields.io/github/issues/open-sauced/pizza" alt="GitHub issues">
+  </a>
+  <a href="https://github.com/open-sauced/api.opensauced.pizza/releases">
+    <img src="https://img.shields.io/github/v/release/open-sauced/pizza.svg?style=flat" alt="GitHub Release">
+  </a>
+  <a href="https://discord.gg/U2peSNf23P">
+    <img src="https://img.shields.io/discord/714698561081704529.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2" alt="Discord">
+  </a>
+  <a href="https://twitter.com/saucedopen">
+    <img src="https://img.shields.io/twitter/follow/saucedopen?label=Follow&style=social" alt="Twitter">
+  </a>
+</p>
 
 ## 🚀 Routes
 
@@ -50,8 +57,13 @@ There are a few required dependencies to build and run the pizza-oven service:
 ### Local postgres database setup
 
 You can use a local postgres database (like with `brew services start postgresql`)
-[configured to accept SSL connections](https://www.postgresql.org/docs/current/ssl-tcp.html),
-an `.env` file with the database's secrets,
+[configured to accept SSL connections](https://www.postgresql.org/docs/current/ssl-tcp.html)
+that has been bootstrapped with the [OpenSauced API migrations](https://github.com/open-sauced/api/tree/beta/migrations).
+It is highly recommended to follow the instructions in the API repository to get a locally running postgres going
+that can be used with the `pizza` oven micro-service.
+
+You'll also need an `.env` file with the database's secrets
+(see `.env.example` in this repo for the required env variables),
 and a locally running version of the Go application.
 
 To start the pizza oven service:
