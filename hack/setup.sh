@@ -141,7 +141,7 @@ spec:
     spec:
       containers:
       - name: pizza-oven
-        image: pizza-oven:latest
+        image: opensauced-pizza:latest
         imagePullPolicy: IfNotPresent
         command: ["/usr/bin/pizza-oven"]
         env:
@@ -221,7 +221,7 @@ echo
 echo "########################################################################"
 echo "Applying database migrations"
 echo
-wrapped_psql -f ${ROOTPATH}/migrations/20230622103000_baseline.sql
+wrapped_psql -f ${ROOTPATH}/hack/pizza.sql
 
 # Build the pizza-oven container
 echo
@@ -235,7 +235,7 @@ echo
 echo "########################################################################"
 echo "Uploading pizza oven container to kind cluster"
 echo
-kind --name opensauced-pizza load docker-image pizza-oven:latest
+kind --name opensauced-pizza load docker-image opensauced-pizza:latest
 
 echo
 echo "########################################################################"

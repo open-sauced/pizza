@@ -23,7 +23,10 @@ local:
 	go build -o build/pizza-oven main.go
 
 build:
-	docker buildx bake
+	docker buildx build \
+		--load \
+		--tag opensauced-pizza:latest \
+		.
 
 setup-test-env:
 	./hack/setup.sh

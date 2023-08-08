@@ -47,48 +47,48 @@ func NewPizzaOvenDbHandler(host, port, user, pwd, dbName string) *PizzaOvenDbHan
 // GetRepositoryID queries the id of a repository based on its git URL
 func (p PizzaOvenDbHandler) GetRepositoryID(insight insights.CommitInsight) (int, error) {
 	var id int
-	err := p.db.QueryRow("SELECT id FROM public.repos WHERE git_url=$1", insight.RepoURLSource).Scan(&id)
+	err := p.db.QueryRow("SELECT id FROM public.baked_repos WHERE clone_url=$1", insight.RepoURLSource).Scan(&id)
 	return id, err
 }
 
 // InsertRepository inserts a git repository by its git_url
 func (p PizzaOvenDbHandler) InsertRepository(insight insights.CommitInsight) (int, error) {
 	var id int
-	err := p.db.QueryRow("INSERT INTO public.repos(git_url) VALUES($1) RETURNING id", insight.RepoURLSource).Scan(&id)
+	err := p.db.QueryRow("INSERT INTO public.baked_repos(clone_url) VALUES($1) RETURNING id", insight.RepoURLSource).Scan(&id)
 	return id, err
 }
 
 // GetAuthorID queries the id of an author by their email
 func (p PizzaOvenDbHandler) GetAuthorID(insight insights.CommitInsight) (int, error) {
 	var id int
-	err := p.db.QueryRow("SELECT id FROM public.users WHERE login=$1", insight.AuthorEmail).Scan(&id)
+	err := p.db.QueryRow("SELECT id FROM public.commit_authors WHERE commit_author_email=$1", insight.AuthorEmail).Scan(&id)
 	return id, err
 }
 
 // InsertAuthor inserts an author by their email
 func (p PizzaOvenDbHandler) InsertAuthor(insight insights.CommitInsight) (int, error) {
 	var id int
-	err := p.db.QueryRow("INSERT INTO public.users(login) VALUES($1) RETURNING id", insight.AuthorEmail).Scan(&id)
+	err := p.db.QueryRow("INSERT INTO public.commit_authors(commit_author_email) VALUES($1) RETURNING id", insight.AuthorEmail).Scan(&id)
 	return id, err
 }
 
 // GetCommitID queries the id of a given commit based on its hash
 func (p PizzaOvenDbHandler) GetCommitID(repoID int, insight insights.CommitInsight) (int, error) {
 	var id int
-	err := p.db.QueryRow("SELECT id FROM public.commits WHERE repo_id=$1 AND commit_hash=$2", repoID, insight.Hash).Scan(&id)
+	err := p.db.QueryRow("SELECT id FROM public.commits WHERE baked_repo_id=$1 AND commit_hash=$2", repoID, insight.Hash).Scan(&id)
 	return id, err
 }
 
 // InsertCommit inserts a commit based on its commit hash
 func (p PizzaOvenDbHandler) InsertCommit(insight insights.CommitInsight, authorID int, repoID int) error {
-	_, err := p.db.Exec("INSERT INTO public.commits(commit_hash, user_id, repo_id, commit_date) VALUES($1, $2, $3, $4)", insight.Hash, authorID, repoID, insight.Date)
+	_, err := p.db.Exec("INSERT INTO public.commits(commit_hash, commit_author_id, baked_repo_id, commit_date) VALUES($1, $2, $3, $4)", insight.Hash, authorID, repoID, insight.Date)
 	return err
 }
 
 // GetLastCommit returns time.Time of the last git commit for the given repoID
 func (p PizzaOvenDbHandler) GetLastCommit(repoID int) (time.Time, error) {
 	var dateTime sql.NullTime
-	err := p.db.QueryRow("SELECT commit_date FROM public.commits WHERE commit_date IS NOT NULL AND repo_id=$1 ORDER BY commit_date DESC LIMIT 1", repoID).Scan(&dateTime)
+	err := p.db.QueryRow("SELECT commit_date FROM public.commits WHERE commit_date IS NOT NULL AND baked_repo_id=$1 ORDER BY commit_date DESC LIMIT 1", repoID).Scan(&dateTime)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// When no rows are returned, use an empty time.Time struct which
