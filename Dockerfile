@@ -1,7 +1,7 @@
 #syntax=docker/dockerfile:1.4
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.1.0 AS xx
 
-FROM --platform=$BUILDPLATFORM golang:1.20-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:alpine AS builder
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 ARG TARGETOS
@@ -15,6 +15,6 @@ RUN --mount=target=/go/pkg/mod,type=cache \
     --mount=target=/root/.cache,type=cache \
     xx-go build -ldflags="${GO_LDFLAGS}" -o pizza-oven .
 
-FROM scratch
+FROM golang:alpine
 COPY --from=builder /app/pizza-oven /usr/bin/
 CMD ["/usr/bin/pizza-oven"]
