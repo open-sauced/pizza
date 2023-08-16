@@ -4,9 +4,10 @@ import "testing"
 
 func TestOpenAndFetch(t *testing.T) {
 	tests := []struct {
-		name     string
-		cacheDir string
-		repos    []string
+		name            string
+		cacheDir        string
+		repos           []string
+		neverEvictRepos map[string]bool
 	}{
 		{
 			name:     "Puts repos into cache in sequential order",
@@ -14,13 +15,17 @@ func TestOpenAndFetch(t *testing.T) {
 			repos: []string{
 				"https://github.com/open-sauced/pizza",
 			},
+			neverEvictRepos: map[string]bool{
+				"https://github.com/kubernetes/kubernetes": true,
+				"https://github.com/open-sauced/pizza-cli": true,
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a new LRU cache
-			c, err := NewGitRepoLRUCache(tt.cacheDir, 1)
+			c, err := NewGitRepoLRUCache(tt.cacheDir, 1, tt.neverEvictRepos)
 			if err != nil {
 				t.Fatalf("unexpected err: %s", err.Error())
 			}
