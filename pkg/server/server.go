@@ -12,8 +12,10 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"go.uber.org/zap"
 
+	"github.com/open-sauced/pizza/oven/pkg/common"
 	"github.com/open-sauced/pizza/oven/pkg/database"
 	"github.com/open-sauced/pizza/oven/pkg/insights"
 	"github.com/open-sauced/pizza/oven/pkg/providers"
@@ -73,9 +75,37 @@ func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	p.Logger.Debugf("Validating and normalizing repository URL: %s", data.URL)
+	normalizedRepoURL, err := common.NormalizeGitURL(data.URL)
+	if err != nil {
+		p.Logger.Debugf("Could not normalize repo URL %s: %s", data.URL, err.Error())
+		http.Error(w, fmt.Sprintf("Could not normalize provided repo URL: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	repoURLendpoint, err := transport.NewEndpoint(normalizedRepoURL)
+	if err != nil {
+		p.Logger.Errorf("Could not create git transport endpoint with repo URL %s: %s", data.URL, err.Error())
+		http.Error(w, fmt.Sprintf("Could not create git transport endpoint from provided repo URL: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	ok, err := common.IsValidGitRepo(repoURLendpoint.String())
+	if !ok {
+		if err != nil {
+			p.Logger.Errorf("Error validating repo URL %s: %s", data.URL, err.Error())
+			http.Error(w, fmt.Sprintf("Error validating remote git repo URL: %s", err.Error()), http.StatusBadRequest)
+			return
+		}
+
+		p.Logger.Debug("Could not validate repo URL %s: %s", data.URL, err.Error())
+		http.Error(w, fmt.Sprintf("not valid git repo URL. Expected format protocol://address but got: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+
 	w.WriteHeader(http.StatusAccepted)
 	if data.Wait {
-		err = p.processRepository(data.URL)
+		err = p.processRepository(repoURLendpoint.String())
 		if err != nil {
 			p.Logger.Errorf("Could not process repository input: %v with error: %v", r.Body, err)
 			http.Error(w, "Could not process input", http.StatusInternalServerError)
@@ -83,7 +113,7 @@ func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		go func() {
-			err = p.processRepository(data.URL)
+			err = p.processRepository(repoURLendpoint.String())
 			if err != nil {
 				p.Logger.Errorf("Could not process repository input: %v with error: %v", r.Body, err)
 				http.Error(w, "Could not process input", http.StatusInternalServerError)
@@ -128,7 +158,7 @@ func (p PizzaOvenServer) processRepository(repoURL string) error {
 	p.Logger.Debugf("Getting repo via configured git provider: %s", insight.RepoURLSource)
 
 	// Use the configured git provider to get the repo
-	providedRepo, err := p.PizzaGitProvider.FetchRepo(repoURL)
+	providedRepo, err := p.PizzaGitProvider.FetchRepo(insight.RepoURLSource)
 	if err != nil {
 		return err
 	}
@@ -162,7 +192,7 @@ func (p PizzaOvenServer) processRepository(repoURL string) error {
 		return err
 	}
 
-	p.Logger.Debugf("Iterating commits in repository: %s", repoURL)
+	p.Logger.Debugf("Iterating commits in repository: %s", insight.RepoURLSource)
 	err = commitIter.ForEach(func(c *object.Commit) error {
 		// TODO - if the committer and author are not the same, handle both
 		// those users. This is the case where there is a separate committer for
@@ -205,6 +235,6 @@ func (p PizzaOvenServer) processRepository(repoURL string) error {
 		return nil
 	})
 
-	p.Logger.Debugf("Finished processing: %s", repoURL)
+	p.Logger.Debugf("Finished processing: %s", insight.RepoURLSource)
 	return err
 }
