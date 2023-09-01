@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/open-sauced/pizza/oven/pkg/common"
@@ -20,6 +23,10 @@ import (
 	"github.com/open-sauced/pizza/oven/pkg/insights"
 	"github.com/open-sauced/pizza/oven/pkg/providers"
 )
+
+// counter is a atomic counter that is used to create canonical, short lived
+// temporary table names for bulk inserts of commit authors
+var counter int64
 
 // Config provides the configuration set on server startup
 // - Never Evict Repos: Repos that are preserved in cache regardless of LRU policy
@@ -178,6 +185,10 @@ func (p PizzaOvenServer) processRepository(repoURL string) error {
 		return err
 	}
 
+	// Add 1 nanosecond since "git log --since" is inclusive of date/times.
+	// Although date/times are not unique to commits, it is incredibly unlikely that
+	// two commits will have the exact same timestamp and be excluded using this method
+	latestCommitDate = latestCommitDate.Add(time.Nanosecond)
 	p.Logger.Debugf("Querying commits since: %s", latestCommitDate.String())
 
 	// Git shortlog options to display summary and email starting at HEAD
@@ -187,54 +198,115 @@ func (p PizzaOvenServer) processRepository(repoURL string) error {
 	}
 
 	p.Logger.Debugf("Getting commit iterator with git log options: %v", gitLogOptions)
-	commitIter, err := gitRepo.Log(&gitLogOptions)
+	authorIter, err := gitRepo.Log(&gitLogOptions)
 	if err != nil {
 		return err
 	}
 
-	p.Logger.Debugf("Iterating commits in repository: %s", insight.RepoURLSource)
-	err = commitIter.ForEach(func(c *object.Commit) error {
+	// Build a unique, atomically safe temporary table name to pivot commit
+	// author data from
+	rawUUID := uuid.New().String()
+	uuid := strings.ReplaceAll(rawUUID, "-", "")
+	tmpTableName := fmt.Sprintf("temp_table_%s_%d", uuid, atomic.AddInt64(&counter, 1))
+
+	p.Logger.Debugf("Using temporary db table for commit authors: %s", tmpTableName)
+	authorTxn, authorStmt, err := p.PizzaOven.PrepareBulkAuthorInsert(tmpTableName)
+	if err != nil {
+		return err
+	}
+
+	// To reduce unnecessary duplicate statement executions, track the unique
+	// author emails using a simple set (represented as a string map to structs)
+	uniqueAuthorEmails := []string{}
+	authorEmailSet := make(map[string]struct{})
+
+	p.Logger.Debugf("Iterating commit authors in repository: %s with temporary tablename: %s", insight.RepoURLSource, tmpTableName)
+	err = authorIter.ForEach(func(c *object.Commit) error {
 		// TODO - if the committer and author are not the same, handle both
 		// those users. This is the case where there is a separate committer for
 		// a patch that was not authored by that specific person making the commit.
 
 		// TODO - if there is a co-author, should handle adding that person on
 		// the commit as well.
-		insight.AuthorEmail = c.Author.Email
-		insight.Hash = c.Hash.String()
-		insight.Date = c.Committer.When.UTC()
 
-		p.Logger.Debugf("Inspecting commit: %s %s %s", insight.AuthorEmail, insight.Hash, insight.Date)
-		authorID, err := p.PizzaOven.GetAuthorID(insight)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				p.Logger.Debugf("Author not found. Inserting: %s %s %s", insight.AuthorEmail, insight.Hash, insight.Date)
-				authorID, err = p.PizzaOven.InsertAuthor(insight)
-				if err != nil {
-					return err
-				}
-			} else {
-				return err
-			}
+		// Check if the author email is in the unique set of author emails
+		if _, ok := authorEmailSet[c.Author.Email]; ok {
+			return nil
 		}
 
-		p.Logger.Debugf("Checking if commit already in database: %s", insight.Hash)
-		_, err = p.PizzaOven.GetCommitID(repoID, insight)
+		// Commit author is not in set so add this author's email as unique
+		authorEmailSet[c.Author.Email] = struct{}{}
+		uniqueAuthorEmails = append(uniqueAuthorEmails, c.Author.Email)
+
+		p.Logger.Debugf("Inspecting commit author: %s", c.Author.Email)
+		return p.PizzaOven.InsertAuthor(authorStmt, insights.CommitInsight{
+			RepoURLSource: repoURL,
+			AuthorEmail:   c.Author.Email,
+			Hash:          "",
+			Date:          time.Time{},
+		})
+	})
+	if err != nil {
+		return err
+	}
+
+	// Resolve, execute, and pivot the bulk author transaction
+	err = p.PizzaOven.ResolveTransaction(authorTxn, authorStmt)
+	if err != nil {
+		return err
+	}
+
+	err = p.PizzaOven.PivotTmpTableToAuthorsTable(tmpTableName)
+	if err != nil {
+		return err
+	}
+
+	// Re-query the database for author email ids based on the unique list of
+	// author emails that have just been committed
+	authorEmailIDMap, err := p.PizzaOven.GetAuthorIDs(uniqueAuthorEmails)
+	if err != nil {
+		return err
+	}
+
+	// Rebuild the iterator from the start using the same options
+	commitIter, err := gitRepo.Log(&gitLogOptions)
+	if err != nil {
+		return err
+	}
+
+	// Get ready for the commit bulk action
+	commitTxn, commitStmt, err := p.PizzaOven.PrepareBulkCommitInsert()
+	if err != nil {
+		return err
+	}
+
+	p.Logger.Debugf("Iterating commits in repository: %s", insight.RepoURLSource)
+	err = commitIter.ForEach(func(c *object.Commit) error {
+		i := insights.CommitInsight{
+			RepoURLSource: repoURL,
+			AuthorEmail:   c.Author.Email,
+			Hash:          c.Hash.String(),
+			Date:          c.Committer.When.UTC(),
+		}
+
+		p.Logger.Debugf("Inspecting commit: %s %s %s", i.AuthorEmail, i.Hash, i.Date)
+		err = p.PizzaOven.InsertCommit(commitStmt, i, authorEmailIDMap[i.AuthorEmail], repoID)
 		if err != nil {
-			if err == sql.ErrNoRows {
-				p.Logger.Debugf("Commit not found. Inserting into database: %s", insight.Hash)
-				err = p.PizzaOven.InsertCommit(insight, authorID, repoID)
-				if err != nil {
-					return err
-				}
-			} else {
-				return err
-			}
+			return err
 		}
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// Execute and resolve the bulk commit insert
+	err = p.PizzaOven.ResolveTransaction(commitTxn, commitStmt)
+	if err != nil {
+		return err
+	}
 
 	p.Logger.Debugf("Finished processing: %s", insight.RepoURLSource)
-	return err
+	return nil
 }
