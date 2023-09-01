@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -18,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/open-sauced/pizza/oven/pkg/database"
+	"github.com/open-sauced/pizza/oven/pkg/github"
 	"github.com/open-sauced/pizza/oven/pkg/insights"
 	"github.com/open-sauced/pizza/oven/pkg/providers"
 )
@@ -69,33 +69,28 @@ type orgRepo struct {
 }
 type orgRepoList []orgRepo
 
-func (p PizzaOvenServer) processOrg(orgUrlString string, processArchived bool) (orgRepoList, error) {
-	repoList := make(orgRepoList, 0)
+func (p PizzaOvenServer) processOrg(orgUrlString string, processArchived bool) ([]string, error) {
+
+	var htmlUrls []string
 	orgUrl, err := url.Parse(orgUrlString)
 	if err != nil {
-		return repoList, err
+		return htmlUrls, err
 	}
 	if orgUrl.Hostname() == "github.com" {
-		orgApiUrlString := fmt.Sprintf("https://api.github.com/orgs%s/repos", orgUrl.Path)
-		res, err := http.Get(orgApiUrlString)
+		client := github.NewClient(nil)
+		orgName := strings.Trim(orgUrl.Path, "/")
+		repos, err := client.ListReposByOrg(orgName)
 		if err != nil {
-			return repoList, fmt.Errorf("Unable to request repo list from %s", orgApiUrlString)
+			return htmlUrls, fmt.Errorf("Error encountered fetching repositories, org: %s with error: %s ", orgName, err)
 		}
-		body, err := io.ReadAll(res.Body)
-		res.Body.Close()
-		json.Unmarshal(body, &repoList)
-		if processArchived {
-			return repoList, nil
+		if !processArchived {
+			repos = github.FilterArchivedRepos(repos)
 		}
-		filteredRepoList := make(orgRepoList, 0)
-		for _, repo := range repoList {
-			if !repo.Archived {
-				filteredRepoList = append(filteredRepoList, repo)
-			}
-		}
-		return filteredRepoList, nil
+		htmlUrls = github.GetRepoHTMLUrls(repos)
+
+		return htmlUrls, nil
 	} else {
-		return repoList, fmt.Errorf("Cannot parse organizations from %s", orgUrl.Hostname())
+		return htmlUrls, fmt.Errorf("Cannot parse organizations from %s", orgUrl.Hostname())
 	}
 }
 
@@ -117,14 +112,14 @@ func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 	if data.Wait {
 		if data.Org != "" {
-			repoList, err := p.processOrg(data.Org, data.Archives)
+			cloneUrls, err := p.processOrg(data.Org, data.Archives)
 			if err != nil {
 				p.Logger.Errorf("Could not process org input: %v with error: %v", r.Body, err)
 				http.Error(w, "Could not process input", http.StatusInternalServerError)
 				return
 			}
-			for _, repo := range repoList {
-				err = p.processRepository(repo.URL)
+			for _, cloneUrl := range cloneUrls {
+				err = p.processRepository(cloneUrl)
 			}
 			return
 		}
@@ -136,21 +131,21 @@ func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		if data.Org != "" {
-			repoList, err := p.processOrg(data.Org, data.Archives)
+			cloneUrls, err := p.processOrg(data.Org, data.Archives)
 			if err != nil {
 				p.Logger.Errorf("Could not process org input: %v with error: %v", r.Body, err)
 				http.Error(w, "Could not process input", http.StatusInternalServerError)
 				return
 			}
 			errors := make([]string, 0)
-			for _, repo := range repoList {
-				go func(repo orgRepo) {
-					err = p.processRepository(repo.URL)
+			for _, cloneUrl := range cloneUrls {
+				go func(cloneUrl string) {
+					err = p.processRepository(cloneUrl)
 					if err != nil {
-						errors = append(errors, fmt.Sprintf("Could not process repo: %v with error: %v", repo, err))
+						errors = append(errors, fmt.Sprintf("Could not process repo clone URL: %v with error: %v", cloneUrl, err))
 					}
 
-				}(repo)
+				}(cloneUrl)
 			}
 			if len(errors) > 0 {
 				errorString := strings.Join(errors, "\n")
