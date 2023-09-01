@@ -167,21 +167,21 @@ func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		if data.Org != "" {
-			cloneUrls, err := p.processOrg(data.Org, data.Archives)
+			htmlUrls, err := p.processOrg(data.Org, data.Archives)
 			if err != nil {
 				p.Logger.Errorf("Could not process org input: %v with error: %v", r.Body, err)
 				http.Error(w, "Could not process input", http.StatusInternalServerError)
 				return
 			}
 			errors := make([]string, 0)
-			for _, cloneUrl := range cloneUrls {
-				go func(cloneUrl string) {
-					err = p.processRepository(cloneUrl)
+			for _, htmlUrl := range htmlUrls {
+				go func(htmlUrl string) {
+					err = p.processRepository(htmlUrl)
 					if err != nil {
-						errors = append(errors, fmt.Sprintf("Could not process repo clone URL: %v with error: %v", cloneUrl, err))
+						errors = append(errors, fmt.Sprintf("Could not process repo clone URL: %v with error: %v", htmlUrl, err))
 					}
 
-				}(cloneUrl)
+				}(htmlUrl)
 			}
 			if len(errors) > 0 {
 				errorString := strings.Join(errors, "\n")
