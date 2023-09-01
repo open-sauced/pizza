@@ -11,8 +11,11 @@ jobs:
   release:
     name: Semantic release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     timeout-minutes: 10
     steps:
+
       - name: "☁️  Checkout repository"
         uses: actions/checkout@v3
         with:
@@ -22,4 +25,6 @@ jobs:
         id: semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SKIP_NPM_PUBLISH: true
+          SKIP_DOCKER_PUBLISH: true
         uses: open-sauced/release@v2
