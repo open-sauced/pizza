@@ -45,6 +45,26 @@ curl -d '{"url":"https://github.com/open-sauced/insights"}' \
   -X POST http://localhost:8080/bake
 ```
 
+Alternatively, the bake route can accept a `POST` request with a body that specifies
+a GitHub organization, and the server will query the GitHub REST API to get a list of 
+repositories for the organization and process these repositories. 
+
+Example:
+
+```bash
+curl -d '{"org":"https://github.com/open-sauced"}' \
+  -H "Content-Type: application/json" \
+  -X POST http://localhost:8080/bake
+```
+
+By default, the server will filter out repositories that are archived before processing
+them. However, this can be overridden in the `POST` request in this way:
+
+```bash
+curl -d '{"org":"https://github.com/open-sauced", "archives": true}' \
+  -H "Content-Type: application/json" \
+  -X POST http://localhost:8080/bake
+```
 
 ## 🖥️ Local development
 
