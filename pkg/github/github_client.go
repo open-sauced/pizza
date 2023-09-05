@@ -49,9 +49,8 @@ func (s *GithubClient) ListReposByOrg(org string) ([]*github.Repository, error) 
 
 func FilterArchivedRepos(repos []*github.Repository) []*github.Repository {
 	var filteredRepos []*github.Repository
-	var falseVal bool = false
 	for _, repo := range repos {
-		if repo.Archived != &falseVal {
+		if !*repo.Archived {
 			filteredRepos = append(filteredRepos, repo)
 		}
 	}
