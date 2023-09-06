@@ -5,7 +5,6 @@ go 1.20
 require (
 	github.com/go-git/go-git/v5 v5.6.1
 	github.com/google/go-github/v54 v54.0.0
-	github.com/google/uuid v1.3.1
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
 	go.uber.org/zap v1.24.0
