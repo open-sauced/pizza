@@ -59,7 +59,8 @@ func (p PizzaOvenServer) Run(serverPort string) {
 	//nolint:errcheck
 	defer p.Logger.Sync()
 	p.Logger.Infof("Starting server on port %s", serverPort)
-	http.HandleFunc("/bake", p.handleRequest)
+	http.HandleFunc("/bake", p.handleBakeRequest)
+	http.HandleFunc("/bake-org", p.handleBakeOrgRequest)
 	http.HandleFunc("/ping", p.pingHandler)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", serverPort), nil))
 }
@@ -102,7 +103,7 @@ func (p PizzaOvenServer) processOrg(orgUrlString string, processArchived bool) (
 	}
 }
 
-func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
+func (p PizzaOvenServer) handleBakeRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		p.Logger.Errorf("Received request with invalid method: %v", r.Body)
 		http.Error(w, "Invalid request method, expected post", http.StatusMethodNotAllowed)
@@ -147,6 +148,40 @@ func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusAccepted)
 	if data.Wait {
+		err = p.processRepository(data.URL)
+		if err != nil {
+			p.Logger.Errorf("Could not process repository input: %v with error: %v", r.Body, err)
+			http.Error(w, "Could not process input", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		go func() {
+			err = p.processRepository(repoURLendpoint.String())
+			if err != nil {
+				p.Logger.Errorf("Could not process repository input: %v with error: %v", r.Body, err)
+				http.Error(w, "Could not process input", http.StatusInternalServerError)
+				return
+			}
+		}()
+	}
+}
+
+func (p PizzaOvenServer) handleBakeOrgRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		p.Logger.Errorf("Received request with invalid method: %v", r.Body)
+		http.Error(w, "Invalid request method, expected post", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var data reqData
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		p.Logger.Errorf("Could not decode request json body: %v with error: %v", r.Body, err)
+		http.Error(w, "Could not decode request body", http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+	if data.Wait {
 		if data.Org != "" {
 			cloneUrls, err := p.processOrg(data.Org, data.Archives)
 			if err != nil {
@@ -154,15 +189,16 @@ func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Could not process input", http.StatusInternalServerError)
 				return
 			}
+			errors := make([]string, 0)
 			for _, cloneUrl := range cloneUrls {
 				err = p.processRepository(cloneUrl)
 			}
-			return
-		}
-		err = p.processRepository(data.URL)
-		if err != nil {
-			p.Logger.Errorf("Could not process repository input: %v with error: %v", r.Body, err)
-			http.Error(w, "Could not process input", http.StatusInternalServerError)
+			if len(errors) > 0 {
+				errorString := strings.Join(errors, "\n")
+				p.Logger.Error(errorString)
+				http.Error(w, "Could not process input", http.StatusInternalServerError)
+			}
+
 			return
 		}
 	} else {
@@ -190,14 +226,6 @@ func (p PizzaOvenServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		go func() {
-			err = p.processRepository(repoURLendpoint.String())
-			if err != nil {
-				p.Logger.Errorf("Could not process repository input: %v with error: %v", r.Body, err)
-				http.Error(w, "Could not process input", http.StatusInternalServerError)
-				return
-			}
-		}()
 	}
 }
 
