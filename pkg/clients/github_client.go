@@ -1,4 +1,4 @@
-package github
+package clients
 
 import (
 	"context"
@@ -7,26 +7,26 @@ import (
 	"github.com/google/go-github/v54/github"
 )
 
-type GithubClient struct {
+type GithubApiClient struct {
 	client *github.Client
 }
 
-func NewTokenClient(token string) *GithubClient {
+func NewGithubTokenClient(token string) *GithubApiClient {
 	ctx := context.Background()
-	s := &GithubClient{
+	s := &GithubApiClient{
 		client: github.NewTokenClient(ctx, token),
 	}
 	return s
 }
 
-func NewClient(httpClient *http.Client) *GithubClient {
-	s := &GithubClient{
+func NewGithubClient(httpClient *http.Client) *GithubApiClient {
+	s := &GithubApiClient{
 		client: github.NewClient(httpClient),
 	}
 	return s
 }
 
-func (s *GithubClient) ListReposByOrg(org string) ([]*github.Repository, error) {
+func (s *GithubApiClient) ListReposByOrg(org string) ([]*github.Repository, error) {
 	ctx := context.Background()
 	opt := &github.RepositoryListByOrgOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
@@ -47,7 +47,7 @@ func (s *GithubClient) ListReposByOrg(org string) ([]*github.Repository, error) 
 	return allRepos, nil
 }
 
-func FilterArchivedRepos(repos []*github.Repository) []*github.Repository {
+func FilterGithubArchivedRepos(repos []*github.Repository) []*github.Repository {
 	var filteredRepos []*github.Repository
 	for _, repo := range repos {
 		if !*repo.Archived {
@@ -57,13 +57,13 @@ func FilterArchivedRepos(repos []*github.Repository) []*github.Repository {
 	return filteredRepos
 }
 
-func GetRepoHTMLUrls(repos []*github.Repository) []string {
+func GetGithubRepoHTMLUrls(repos []*github.Repository) []string {
 	var urls []string
 	for _, repo := range repos {
 
-		htmlUrl := repo.GetHTMLURL()
-		if htmlUrl != "" {
-			urls = append(urls, htmlUrl)
+		htmlURL := repo.GetHTMLURL()
+		if htmlURL != "" {
+			urls = append(urls, htmlURL)
 		}
 	}
 	return urls
