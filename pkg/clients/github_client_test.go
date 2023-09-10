@@ -20,7 +20,7 @@ func createRepoList(org string, totalCount int, archiveCount int) []*github.Repo
 	return repoList
 }
 
-func TestFilterArchivedRepos(t *testing.T) {
+func TestFilterGithubArchivedRepos(t *testing.T) {
 	totalCount := 10
 	archiveCount := 2
 	filteredCountExpected := (totalCount - archiveCount)
@@ -31,7 +31,7 @@ func TestFilterArchivedRepos(t *testing.T) {
 	}
 }
 
-func TestGetRepoHTMLUrls(t *testing.T) {
+func TestGetGithubRepoHTMLUrls(t *testing.T) {
 	expected := []string{
 		"https://github.com/open-sauced/repo-0",
 		"https://github.com/open-sauced/repo-1",
