@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -106,6 +107,47 @@ func (p PizzaOvenServer) processOrg(orgURLString string, processArchived bool) (
 
 }
 
+/*
+Accepts URL value and calls:
+normalized = common.NormalizeGitURL()
+endpoint = transport.NewEndpoint(normalized)
+common.IsValidGitRepo(endpoint)
+return endpoint
+
+returns first encountered error, appropriate HTTP error message, and endpoint string value
+*/
+func (p *PizzaOvenServer) getValidRepoEndpoint(repoURL string) (error, string, string) {
+	p.Logger.Debugf("Validating and normalizing repository URL: %s", repoURL)
+	normalizedRepoURL, err := common.NormalizeGitURL(repoURL)
+	if err != nil {
+		return fmt.Errorf("Could not normalize repo URL %s: %s", repoURL, err.Error()),
+			fmt.Sprintf("Could not normalize provided repo URL: %s", err.Error()),
+			""
+	}
+
+	repoURLendpoint, err := transport.NewEndpoint(normalizedRepoURL)
+	if err != nil {
+		return fmt.Errorf("Could not create git transport endpoint with repo URL %s: %s", repoURL, err.Error()),
+			fmt.Sprintf("Could not create git transport endpoint from provided repo URL: %s", err.Error()),
+			""
+	}
+
+	ok, err := common.IsValidGitRepo(repoURLendpoint.String())
+	if !ok {
+		if err != nil {
+			return fmt.Errorf("Error validating repo URL %s: %s", repoURL, err.Error()),
+				fmt.Sprintf("Error validating remote git repo URL: %s", err.Error()),
+				""
+		}
+
+		return fmt.Errorf("Could not validate repo URL %s: %s", repoURL, err.Error()),
+			fmt.Sprintf("not valid git repo URL. Expected format protocol://address but got: %s", err.Error()),
+			""
+	}
+	// Happy Path
+	return nil, "", repoURLendpoint.String()
+}
+
 func (p PizzaOvenServer) handleBakeRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		p.Logger.Errorf("Received request with invalid method: %v", r.Body)
@@ -120,38 +162,15 @@ func (p PizzaOvenServer) handleBakeRequest(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Could not decode request body", http.StatusBadRequest)
 		return
 	}
-
-	p.Logger.Debugf("Validating and normalizing repository URL: %s", data.URL)
-	normalizedRepoURL, err := common.NormalizeGitURL(data.URL)
+	err, httpErrorString, repoURLendpoint := p.getValidRepoEndpoint(data.URL)
 	if err != nil {
-		p.Logger.Debugf("Could not normalize repo URL %s: %s", data.URL, err.Error())
-		http.Error(w, fmt.Sprintf("Could not normalize provided repo URL: %s", err.Error()), http.StatusBadRequest)
+		p.Logger.Debug(err.Error())
+		http.Error(w, httpErrorString, http.StatusBadRequest)
 		return
 	}
-
-	repoURLendpoint, err := transport.NewEndpoint(normalizedRepoURL)
-	if err != nil {
-		p.Logger.Errorf("Could not create git transport endpoint with repo URL %s: %s", data.URL, err.Error())
-		http.Error(w, fmt.Sprintf("Could not create git transport endpoint from provided repo URL: %s", err.Error()), http.StatusBadRequest)
-		return
-	}
-
-	ok, err := common.IsValidGitRepo(repoURLendpoint.String())
-	if !ok {
-		if err != nil {
-			p.Logger.Errorf("Error validating repo URL %s: %s", data.URL, err.Error())
-			http.Error(w, fmt.Sprintf("Error validating remote git repo URL: %s", err.Error()), http.StatusBadRequest)
-			return
-		}
-
-		p.Logger.Debug("Could not validate repo URL %s: %s", data.URL, err.Error())
-		http.Error(w, fmt.Sprintf("not valid git repo URL. Expected format protocol://address but got: %s", err.Error()), http.StatusBadRequest)
-		return
-	}
-
 	w.WriteHeader(http.StatusAccepted)
 	if data.Wait {
-		err = p.processRepository(data.URL)
+		err = p.processRepository(repoURLendpoint)
 		if err != nil {
 			p.Logger.Errorf("Could not process repository input: %v with error: %v", r.Body, err)
 			http.Error(w, "Could not process input", http.StatusInternalServerError)
@@ -159,7 +178,7 @@ func (p PizzaOvenServer) handleBakeRequest(w http.ResponseWriter, r *http.Reques
 		}
 	} else {
 		go func() {
-			err = p.processRepository(repoURLendpoint.String())
+			err = p.processRepository(repoURLendpoint)
 			if err != nil {
 				p.Logger.Errorf("Could not process repository input: %v with error: %v", r.Body, err)
 				http.Error(w, "Could not process input", http.StatusInternalServerError)
@@ -184,52 +203,69 @@ func (p PizzaOvenServer) handleBakeOrgRequest(w http.ResponseWriter, r *http.Req
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
+	if data.Org == "" {
+		p.Logger.Error("Could not process blank org input")
+		http.Error(w, "Could not process input", http.StatusBadRequest)
+		return
+	}
+	cloneURLs, err := p.processOrg(data.Org, data.Archives)
+	if err != nil {
+		p.Logger.Errorf("Could not process org input: %v with error: %v", r.Body, err)
+		http.Error(w, "Could not process input", http.StatusInternalServerError)
+		return
+	}
 	if data.Wait {
-		if data.Org != "" {
-			cloneURLs, err := p.processOrg(data.Org, data.Archives)
-			if err != nil {
-				p.Logger.Errorf("Could not process org input: %v with error: %v", r.Body, err)
-				http.Error(w, "Could not process input", http.StatusInternalServerError)
-				return
-			}
-			errors := make([]string, 0)
-			for _, cloneURL := range cloneURLs {
-				err = p.processRepository(cloneURL)
-				errors = append(errors, err.Error())
-			}
-			if len(errors) > 0 {
-				errorString := strings.Join(errors, "\n")
-				p.Logger.Error(errorString)
-				http.Error(w, "Could not process input", http.StatusInternalServerError)
-			}
-
-			return
+		errorChannel := make(chan error)
+		wg := new(sync.WaitGroup)
+		wg.Add(len(cloneURLs))
+		for _, htmlURL := range cloneURLs {
+			go func(htmlURL string, wg *sync.WaitGroup, c chan error) {
+				err, _, repoURLendpoint := p.getValidRepoEndpoint(htmlURL)
+				if err != nil {
+					c <- err
+				} else {
+					c <- p.processRepository(repoURLendpoint)
+				}
+				defer wg.Done()
+			}(htmlURL, wg, errorChannel)
 		}
+		defer wg.Wait()
+		var errorFound bool = false
+		for err := range errorChannel {
+			if err != nil {
+				p.Logger.Error(err.Error())
+				errorFound = true
+			}
+		}
+		if errorFound {
+			http.Error(w, "Could not process input", http.StatusInternalServerError)
+		}
+		return
 	} else {
-		if data.Org != "" {
-			htmlURLs, err := p.processOrg(data.Org, data.Archives)
-			if err != nil {
-				p.Logger.Errorf("Could not process org input: %v with error: %v", r.Body, err)
-				http.Error(w, "Could not process input", http.StatusInternalServerError)
-				return
-			}
-			errors := make([]string, 0)
-			for _, htmlURL := range htmlURLs {
-				go func(htmlURL string) {
-					err = p.processRepository(htmlURL)
-					if err != nil {
-						errors = append(errors, fmt.Sprintf("Could not process repo clone URL: %v with error: %v", htmlURL, err))
-					}
-
-				}(htmlURL)
-			}
-			if len(errors) > 0 {
-				errorString := strings.Join(errors, "\n")
-				p.Logger.Error(errorString)
-				http.Error(w, "Could not process input", http.StatusInternalServerError)
-			}
+		htmlURLs, err := p.processOrg(data.Org, data.Archives)
+		if err != nil {
+			p.Logger.Errorf("Could not process org input: %v with error: %v", r.Body, err)
+			http.Error(w, "Could not process input", http.StatusInternalServerError)
 			return
 		}
+		errorChannel := make(chan error)
+
+		for _, htmlURL := range htmlURLs {
+			go func(htmlURL string, c chan error) {
+				err, _, repoURLendpoint := p.getValidRepoEndpoint(htmlURL)
+				if err != nil {
+					c <- err
+				} else {
+					c <- p.processRepository(repoURLendpoint)
+				}
+			}(htmlURL, errorChannel)
+		}
+		for err := range errorChannel {
+			if err != nil {
+				p.Logger.Error(err.Error())
+			}
+		}
+		return
 	}
 }
 
