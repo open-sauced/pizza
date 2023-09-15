@@ -242,30 +242,32 @@ func (p PizzaOvenServer) handleBakeOrgRequest(w http.ResponseWriter, r *http.Req
 		}
 		return
 	} else {
-		htmlURLs, err := p.processOrg(data.Org, data.Archives)
-		if err != nil {
-			p.Logger.Errorf("Could not process org input: %v with error: %v", r.Body, err)
-			http.Error(w, "Could not process input", http.StatusInternalServerError)
-			return
-		}
-		errorChannel := make(chan error)
-
-		for _, htmlURL := range htmlURLs {
-			go func(htmlURL string, c chan error) {
-				err, _, repoURLendpoint := p.getValidRepoEndpoint(htmlURL)
-				if err != nil {
-					c <- err
-				} else {
-					c <- p.processRepository(repoURLendpoint)
-				}
-			}(htmlURL, errorChannel)
-		}
-		for err := range errorChannel {
+		go func() {
+			htmlURLs, err := p.processOrg(data.Org, data.Archives)
 			if err != nil {
-				p.Logger.Error(err.Error())
+				p.Logger.Errorf("Could not process org input: %v with error: %v", r.Body, err)
+				http.Error(w, "Could not process input", http.StatusInternalServerError)
+				return
 			}
-		}
-		return
+			errorChannel := make(chan error)
+
+			for _, htmlURL := range htmlURLs {
+				go func(htmlURL string, c chan error) {
+					err, _, repoURLendpoint := p.getValidRepoEndpoint(htmlURL)
+					if err != nil {
+						c <- err
+					} else {
+						c <- p.processRepository(repoURLendpoint)
+					}
+				}(htmlURL, errorChannel)
+			}
+			for err := range errorChannel {
+				if err != nil {
+					p.Logger.Error(err.Error())
+				}
+			}
+			return
+		}()
 	}
 }
 
