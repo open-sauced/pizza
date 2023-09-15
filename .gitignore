@@ -3,3 +3,4 @@ build/
 
 # explicitly ignore env files to ensure secrets aren't being accidentally committed
 .env
+database/

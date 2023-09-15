@@ -25,7 +25,7 @@ type PizzaOvenDbHandler struct {
 // NewPizzaOvenDbHandler builds a PizzaOvenDbHandler based on the provided
 // database connection parameters
 func NewPizzaOvenDbHandler(host, port, user, pwd, dbName string) *PizzaOvenDbHandler {
-	connectString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=require", host, port, user, pwd, dbName)
+	connectString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", host, port, user, pwd, dbName)
 
 	// Acquire the *sql.DB instance
 	dbPool, err := sql.Open("postgres", connectString)
