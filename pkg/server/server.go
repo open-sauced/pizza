@@ -77,24 +77,18 @@ type orgReqData struct {
 	Archives bool   `json:"archives,omitempty"`
 }
 
-type orgRepo struct {
-	URL      string `json:"html_url"`
-	Archived bool   `json:"archived"`
-}
-type orgRepoList []orgRepo
-
 func (p PizzaOvenServer) processOrg(orgURLString string, processArchived bool) ([]string, error) {
 
 	var htmlURLs []string
-	orgUrl, err := url.Parse(orgURLString)
+	orgURL, err := url.Parse(orgURLString)
 	if err != nil {
 		return htmlURLs, err
 	}
-	if orgUrl.Hostname() != "github.com" {
-		return htmlURLs, fmt.Errorf("Cannot parse organizations from %s", orgUrl.Hostname())
+	if orgURL.Hostname() != "github.com" {
+		return htmlURLs, fmt.Errorf("Cannot parse organizations from %s", orgURL.Hostname())
 	}
 	client := clients.NewGithubClient(nil)
-	orgName := strings.Trim(orgUrl.Path, "/")
+	orgName := strings.Trim(orgURL.Path, "/")
 	repos, err := client.ListReposByOrg(orgName)
 	if err != nil {
 		return htmlURLs, fmt.Errorf("Error encountered fetching repositories, org: %s with error: %s ", orgName, err)
@@ -116,36 +110,36 @@ return endpoint
 
 returns first encountered error, appropriate HTTP error message, and endpoint string value
 */
-func (p *PizzaOvenServer) getValidRepoEndpoint(repoURL string) (error, string, string) {
+func (p *PizzaOvenServer) getValidRepoEndpoint(repoURL string) (string, string, error) {
 	p.Logger.Debugf("Validating and normalizing repository URL: %s", repoURL)
 	normalizedRepoURL, err := common.NormalizeGitURL(repoURL)
 	if err != nil {
-		return fmt.Errorf("Could not normalize repo URL %s: %s", repoURL, err.Error()),
+		return "",
 			fmt.Sprintf("Could not normalize provided repo URL: %s", err.Error()),
-			""
+			fmt.Errorf("Could not normalize repo URL %s: %s", repoURL, err.Error())
 	}
 
 	repoURLendpoint, err := transport.NewEndpoint(normalizedRepoURL)
 	if err != nil {
-		return fmt.Errorf("Could not create git transport endpoint with repo URL %s: %s", repoURL, err.Error()),
+		return "",
 			fmt.Sprintf("Could not create git transport endpoint from provided repo URL: %s", err.Error()),
-			""
+			fmt.Errorf("Could not create git transport endpoint with repo URL %s: %s", repoURL, err.Error())
 	}
 
 	ok, err := common.IsValidGitRepo(repoURLendpoint.String())
 	if !ok {
 		if err != nil {
-			return fmt.Errorf("Error validating repo URL %s: %s", repoURL, err.Error()),
+			return "",
 				fmt.Sprintf("Error validating remote git repo URL: %s", err.Error()),
-				""
+				fmt.Errorf("Error validating repo URL %s: %s", repoURL, err.Error())
 		}
 
-		return fmt.Errorf("Could not validate repo URL %s: %s", repoURL, err.Error()),
+		return "",
 			fmt.Sprintf("not valid git repo URL. Expected format protocol://address but got: %s", err.Error()),
-			""
+			fmt.Errorf("Could not validate repo URL %s: %s", repoURL, err.Error())
 	}
 	// Happy Path
-	return nil, "", repoURLendpoint.String()
+	return repoURLendpoint.String(), "", nil
 }
 
 func (p PizzaOvenServer) handleBakeRequest(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +156,7 @@ func (p PizzaOvenServer) handleBakeRequest(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Could not decode request body", http.StatusBadRequest)
 		return
 	}
-	err, httpErrorString, repoURLendpoint := p.getValidRepoEndpoint(data.URL)
+	httpErrorString, repoURLendpoint, err := p.getValidRepoEndpoint(data.URL)
 	if err != nil {
 		p.Logger.Debug(err.Error())
 		http.Error(w, httpErrorString, http.StatusBadRequest)
@@ -220,7 +214,7 @@ func (p PizzaOvenServer) handleBakeOrgRequest(w http.ResponseWriter, r *http.Req
 		wg.Add(len(cloneURLs))
 		for _, htmlURL := range cloneURLs {
 			go func(htmlURL string, wg *sync.WaitGroup, c chan error) {
-				err, _, repoURLendpoint := p.getValidRepoEndpoint(htmlURL)
+				_, repoURLendpoint, err := p.getValidRepoEndpoint(htmlURL)
 				if err != nil {
 					c <- err
 				} else {
@@ -230,7 +224,7 @@ func (p PizzaOvenServer) handleBakeOrgRequest(w http.ResponseWriter, r *http.Req
 			}(htmlURL, wg, errorChannel)
 		}
 		defer wg.Wait()
-		var errorFound bool = false
+		var errorFound = false
 		for err := range errorChannel {
 			if err != nil {
 				p.Logger.Error(err.Error())
@@ -239,8 +233,8 @@ func (p PizzaOvenServer) handleBakeOrgRequest(w http.ResponseWriter, r *http.Req
 		}
 		if errorFound {
 			http.Error(w, "Could not process input", http.StatusInternalServerError)
+			return
 		}
-		return
 	} else {
 		go func() {
 			htmlURLs, err := p.processOrg(data.Org, data.Archives)
@@ -253,7 +247,7 @@ func (p PizzaOvenServer) handleBakeOrgRequest(w http.ResponseWriter, r *http.Req
 
 			for _, htmlURL := range htmlURLs {
 				go func(htmlURL string, c chan error) {
-					err, _, repoURLendpoint := p.getValidRepoEndpoint(htmlURL)
+					_, repoURLendpoint, err := p.getValidRepoEndpoint(htmlURL)
 					if err != nil {
 						c <- err
 					} else {
@@ -266,7 +260,6 @@ func (p PizzaOvenServer) handleBakeOrgRequest(w http.ResponseWriter, r *http.Req
 					p.Logger.Error(err.Error())
 				}
 			}
-			return
 		}()
 	}
 }

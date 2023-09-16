@@ -7,26 +7,26 @@ import (
 	"github.com/google/go-github/v54/github"
 )
 
-type GithubApiClient struct {
+type GithubAPIClient struct {
 	client *github.Client
 }
 
-func NewGithubTokenClient(token string) *GithubApiClient {
+func NewGithubTokenClient(token string) *GithubAPIClient {
 	ctx := context.Background()
-	s := &GithubApiClient{
+	s := &GithubAPIClient{
 		client: github.NewTokenClient(ctx, token),
 	}
 	return s
 }
 
-func NewGithubClient(httpClient *http.Client) *GithubApiClient {
-	s := &GithubApiClient{
+func NewGithubClient(httpClient *http.Client) *GithubAPIClient {
+	s := &GithubAPIClient{
 		client: github.NewClient(httpClient),
 	}
 	return s
 }
 
-func (s *GithubApiClient) ListReposByOrg(org string) ([]*github.Repository, error) {
+func (s *GithubAPIClient) ListReposByOrg(org string) ([]*github.Repository, error) {
 	ctx := context.Background()
 	opt := &github.RepositoryListByOrgOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
