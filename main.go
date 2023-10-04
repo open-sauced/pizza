@@ -20,9 +20,13 @@ func main() {
 	var err error
 
 	// Initialize & parse flags
-	var configPath string
+	var (
+		configPath string
+		sslmode    = "require"
+	)
 	flag.StringVar(&configPath, "config", "", "path to .yaml file config")
 	debugMode := flag.Bool("debug", false, "run in debug mode")
+	disableSSL := flag.Bool("ssl-disable", false, "set 'disable' ssl mode")
 	flag.Parse()
 
 	if *debugMode {
@@ -39,6 +43,11 @@ func main() {
 
 	sugarLogger := logger.Sugar()
 	sugarLogger.Infof("initiated zap logger with level: %d", sugarLogger.Level())
+
+	if *disableSSL {
+		sslmode = "disable"
+		sugarLogger.Warn("SSL mode is disabled")
+	}
 
 	// Load the environment variables from the .env file
 	err = godotenv.Load()
@@ -60,7 +69,7 @@ func main() {
 	gitProvider := os.Getenv("GIT_PROVIDER")
 
 	// Initialize the database handler
-	pizzaOven := database.NewPizzaOvenDbHandler(databaseHost, databasePort, databaseUser, databasePwd, databaseDbName)
+	pizzaOven := database.NewPizzaOvenDbHandler(databaseHost, databasePort, databaseUser, databasePwd, databaseDbName, sslmode)
 
 	// Initializes configuration using a provided yaml file
 	config := &server.Config{NeverEvictRepos: make(map[string]bool)}
