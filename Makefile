@@ -1,4 +1,4 @@
-.PHONY: all lint test run local build setup-test-env teardown-test-env
+.PHONY: all lint test run dev local build setup-test-env teardown-test-env
 
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
@@ -18,6 +18,9 @@ test:
 
 run:
 	go run main.go
+
+dev:
+	go run main.go -ssl-disable
 
 local:
 	go build -o build/pizza-oven main.go
