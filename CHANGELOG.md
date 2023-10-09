@@ -5,6 +5,13 @@
 
 > All notable changes to this project will be documented in this file
 
+## [1.1.0-beta.2](https://github.com/open-sauced/pizza/compare/v1.1.0-beta.1...v1.1.0-beta.2) (2023-10-09)
+
+
+### 🍕 Features
+
+* Ability to turn off sslmode ([#58](https://github.com/open-sauced/pizza/issues/58)) ([b026289](https://github.com/open-sauced/pizza/commit/b0262890b6d74ef85e2d5f57daa73e9ac7f81879))
+
 ## [1.1.0-beta.1](https://github.com/open-sauced/pizza/compare/v1.0.1-beta.1...v1.1.0-beta.1) (2023-10-07)
 
 
