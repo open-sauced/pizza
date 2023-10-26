@@ -23,9 +23,9 @@ func NewInMemoryGitRepoProvider(logger *zap.SugaredLogger) GitRepoProvider {
 }
 
 // FetchRepo clones the configured repository into memory
-func (im *InMemoryGitRepoProvider) FetchRepo(URL string) (GitRepo, error) {
+func (im *InMemoryGitRepoProvider) FetchRepo(url string) (GitRepo, error) {
 	inMemRepo, err := git.Clone(memory.NewStorage(), nil, &git.CloneOptions{
-		URL:          URL,
+		URL:          url,
 		SingleBranch: true,
 	})
 
@@ -34,7 +34,7 @@ func (im *InMemoryGitRepoProvider) FetchRepo(URL string) (GitRepo, error) {
 	}
 
 	return &InMemoryGitRepo{
-		url:  URL,
+		url:  url,
 		repo: inMemRepo,
 	}, nil
 }
