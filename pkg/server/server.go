@@ -289,9 +289,11 @@ func (p PizzaOvenServer) processRepository(repoURL string) error {
 			p.Logger.Debugf("No repo found in db. Inserting repo: %s", insight.RepoURLSource)
 			repoID, err = p.PizzaOven.InsertRepository(insight)
 			if err != nil {
+				p.Logger.Errorf("Failed to insert repository %s: %s", insight.RepoURLSource, err.Error())
 				return err
 			}
 		} else {
+			p.Logger.Errorf("Failed to fetch repository ID: %s", err.Error())
 			return err
 		}
 	}
@@ -301,6 +303,7 @@ func (p PizzaOvenServer) processRepository(repoURL string) error {
 	// Use the configured git provider to get the repo
 	providedRepo, err := p.PizzaGitProvider.FetchRepo(insight.RepoURLSource)
 	if err != nil {
+		p.Logger.Error("Failed to fetch repository %s: %s", insight.RepoURLSource, err.Error())
 		return err
 	}
 	defer providedRepo.Done()
@@ -310,12 +313,14 @@ func (p PizzaOvenServer) processRepository(repoURL string) error {
 	p.Logger.Debugf("Inspecting the head of the git repo: %s", insight.RepoURLSource)
 	ref, err := gitRepo.Head()
 	if err != nil {
+		p.Logger.Errorf("Could not find head of the git repo %s: %s", insight.RepoURLSource, err.Error())
 		return err
 	}
 
 	p.Logger.Debugf("Getting last commit in DB: %s", insight.RepoURLSource)
 	latestCommitDate, err := p.PizzaOven.GetLastCommit(repoID)
 	if err != nil {
+		p.Logger.Errorf("Could not fetch the latest commit date in %s: %s", insight.RepoURLSource, err.Error())
 		return err
 	}
 
@@ -334,6 +339,7 @@ func (p PizzaOvenServer) processRepository(repoURL string) error {
 	p.Logger.Debugf("Getting commit iterator with git log options: %v", gitLogOptions)
 	authorIter, err := gitRepo.Log(&gitLogOptions)
 	if err != nil {
+		p.Logger.Errorf("Failed to retrieve commit iterator: %s", err.Error())
 		return err
 	}
 
@@ -346,6 +352,7 @@ func (p PizzaOvenServer) processRepository(repoURL string) error {
 	p.Logger.Debugf("Using temporary db table for commit authors: %s", tmpTableName)
 	authorTxn, authorStmt, err := p.PizzaOven.PrepareBulkAuthorInsert(tmpTableName)
 	if err != nil {
+		p.Logger.Errorf("Failed to prepare the bulk author insert process: %s", err.Error())
 		return err
 	}
 
@@ -381,17 +388,20 @@ func (p PizzaOvenServer) processRepository(repoURL string) error {
 		})
 	})
 	if err != nil {
+		p.Logger.Errorf("Failed to insert author: %s", err.Error())
 		return err
 	}
 
 	// Resolve, execute, and pivot the bulk author transaction
 	err = p.PizzaOven.ResolveTransaction(authorTxn, authorStmt)
 	if err != nil {
+		p.Logger.Errorf("Failed to resolve bulk author transaction: %s", err.Error())
 		return err
 	}
 
 	err = p.PizzaOven.PivotTmpTableToAuthorsTable(tmpTableName)
 	if err != nil {
+		p.Logger.Errorf("Failed to pivot the temporary authors table: %s", err.Error())
 		return err
 	}
 
@@ -399,18 +409,21 @@ func (p PizzaOvenServer) processRepository(repoURL string) error {
 	// author emails that have just been committed
 	authorEmailIDMap, err := p.PizzaOven.GetAuthorIDs(uniqueAuthorEmails)
 	if err != nil {
+		p.Logger.Errorf("Failed to create the author-email/id map: %s", err.Error())
 		return err
 	}
 
 	// Rebuild the iterator from the start using the same options
 	commitIter, err := gitRepo.Log(&gitLogOptions)
 	if err != nil {
+		p.Logger.Errorf("Failed to rebuild the commit iterator: %s", err.Error())
 		return err
 	}
 
 	// Get ready for the commit bulk action
 	commitTxn, commitStmt, err := p.PizzaOven.PrepareBulkCommitInsert()
 	if err != nil {
+		p.Logger.Errorf("Failed to prepare bulk commit insert process: %s", err.Error())
 		return err
 	}
 
@@ -426,18 +439,21 @@ func (p PizzaOvenServer) processRepository(repoURL string) error {
 		p.Logger.Debugf("Inspecting commit: %s %s %s", i.AuthorEmail, i.Hash, i.Date)
 		err = p.PizzaOven.InsertCommit(commitStmt, i, authorEmailIDMap[i.AuthorEmail], repoID)
 		if err != nil {
+			p.Logger.Errorf("Failed to insert commit: %s", err.Error())
 			return err
 		}
 
 		return nil
 	})
 	if err != nil {
+		p.Logger.Errorf("Failed to insert commit: %s", err.Error())
 		return err
 	}
 
 	// Execute and resolve the bulk commit insert
 	err = p.PizzaOven.ResolveTransaction(commitTxn, commitStmt)
 	if err != nil {
+		p.Logger.Errorf("Could not resolve bulk commit insert transaction %v", err.Error())
 		return err
 	}
 
