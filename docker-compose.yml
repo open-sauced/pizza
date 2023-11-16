@@ -31,7 +31,7 @@ services:
     volumes:
       - .:/app
     working_dir: /app
-    command: go run main.go -debug
+    command: go run main.go -sslmode-disable -debug
     environment:
       - DATABASE_PORT=5432
       - DATABASE_HOST=db
