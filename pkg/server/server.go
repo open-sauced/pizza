@@ -5,8 +5,8 @@ package server
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -53,13 +53,16 @@ func NewPizzaOvenServer(dbHandler *database.PizzaOvenDbHandler, provider provide
 }
 
 // Run starts the http server on the provided port
-func (p PizzaOvenServer) Run(serverPort string) {
+func (p PizzaOvenServer) Run(serverPort string) error {
 	//nolint:errcheck
 	defer p.Logger.Sync()
 	p.Logger.Infof("Starting server on port %s", serverPort)
 	http.HandleFunc("/bake", p.handleRequest)
 	http.HandleFunc("/ping", p.pingHandler)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", serverPort), nil))
+	if err := http.ListenAndServe(fmt.Sprintf(":%s", serverPort), nil); !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }
 
 type reqData struct {

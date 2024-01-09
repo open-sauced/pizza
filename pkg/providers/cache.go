@@ -37,32 +37,32 @@ func NewLRUCacheGitRepoProvider(cacheDir string, minFreeDisk uint64, l *zap.Suga
 	}, nil
 }
 
-// FetchRepo returns a CachedGitRepo which statisfies the GitRepo interface.
+// FetchRepo returns a CachedGitRepo which satisfies the GitRepo interface.
 // It uses its internal LRU cache to "Get" and "Put". If a given git repo
 // is not in the cache, FetchRepo will place it at the top of the cache where
 // it will also be cloned to disk. See GitRepoLRUCache for details.
-func (lc *LRUCacheGitRepoProvider) FetchRepo(URL string) (GitRepo, error) {
+func (lc *LRUCacheGitRepoProvider) FetchRepo(url string) (GitRepo, error) {
 	var err error
 
-	lc.logger.Debugf("Getting repo from LRU cache: %s", URL)
+	lc.logger.Debugf("Getting repo from LRU cache: %s", url)
 
-	repoInCache := lc.LRUCache.Get(URL)
+	repoInCache := lc.LRUCache.Get(url)
 	if repoInCache == nil {
-		lc.logger.Debugf("Cache miss. Putting to cache: %s", URL)
-		repoInCache, err = lc.LRUCache.Put(URL)
+		lc.logger.Debugf("Cache miss. Putting to cache: %s", url)
+		repoInCache, err = lc.LRUCache.Put(url)
 		if err != nil {
 			return nil, fmt.Errorf("could not put to the git repo LRU cache: %s", err.Error())
 		}
 	}
 
-	lc.logger.Debugf("Opening and fetching repo: %s", URL)
+	lc.logger.Debugf("Opening and fetching repo: %s", url)
 	repo, err := repoInCache.OpenAndFetch()
 	if err != nil {
 		return nil, fmt.Errorf("could not open and fetch repo: %s", err.Error())
 	}
 
 	return &CachedGitRepo{
-		url:        URL,
+		url:        url,
 		cacheEntry: repoInCache,
 		repo:       repo,
 	}, nil

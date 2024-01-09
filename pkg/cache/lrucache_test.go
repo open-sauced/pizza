@@ -38,7 +38,7 @@ func validateCache(t *testing.T, c *GitRepoLRUCache, expected []string) {
 		}
 
 		node = node.Next()
-		i = i + 1
+		i++
 	}
 }
 

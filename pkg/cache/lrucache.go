@@ -9,7 +9,6 @@ import (
 	"syscall"
 
 	"github.com/go-git/go-git/v5"
-
 	"golang.org/x/sys/unix"
 )
 
@@ -225,7 +224,7 @@ func (c *GitRepoLRUCache) tryEvict() error {
 		for _, isInNeverEvictRepos := c.neverEvictRepos[lruNode.Value.(*GitRepoFilePath).key]; isInNeverEvictRepos; {
 			lruNode = lruNode.Next()
 			if lruNode == nil {
-				return fmt.Errorf("Disk space completely occupied by neverEvictRepos, could not evict")
+				return fmt.Errorf("disk space completely occupied by neverEvictRepos, could not evict")
 			}
 		}
 

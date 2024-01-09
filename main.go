@@ -69,7 +69,10 @@ func main() {
 	gitProvider := os.Getenv("GIT_PROVIDER")
 
 	// Initialize the database handler
-	pizzaOven := database.NewPizzaOvenDbHandler(databaseHost, databasePort, databaseUser, databasePwd, databaseDbName, sslmode)
+	pizzaOven, err := database.NewPizzaOvenDbHandler(databaseHost, databasePort, databaseUser, databasePwd, databaseDbName, sslmode)
+	if err != nil {
+		sugarLogger.Fatalf("Could not initialize database handler: %s", err.Error())
+	}
 
 	// Initializes configuration using a provided yaml file
 	config := &server.Config{NeverEvictRepos: make(map[string]bool)}
@@ -124,5 +127,7 @@ func main() {
 	}
 
 	pizzaOvenServer := server.NewPizzaOvenServer(pizzaOven, pizzaGitProvider, sugarLogger)
-	pizzaOvenServer.Run(serverPort)
+	if err := pizzaOvenServer.Run(serverPort); err != nil {
+		sugarLogger.Fatalf("Server run failed: %s", err.Error())
+	}
 }

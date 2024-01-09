@@ -6,10 +6,8 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"time"
 
-	// the injected postgres interface implementations for Go SQL
 	"github.com/lib/pq"
 
 	"github.com/open-sauced/pizza/oven/pkg/insights"
@@ -24,24 +22,24 @@ type PizzaOvenDbHandler struct {
 
 // NewPizzaOvenDbHandler builds a PizzaOvenDbHandler based on the provided
 // database connection parameters
-func NewPizzaOvenDbHandler(host, port, user, pwd, dbName, sslmode string) *PizzaOvenDbHandler {
+func NewPizzaOvenDbHandler(host, port, user, pwd, dbName, sslmode string) (*PizzaOvenDbHandler, error) {
 	connectString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", host, port, user, pwd, dbName, sslmode)
 
 	// Acquire the *sql.DB instance
 	dbPool, err := sql.Open("postgres", connectString)
 	if err != nil {
-		log.Fatalf("Could not open database connection: %s", err)
+		return nil, fmt.Errorf("could not open database connection: %s", err)
 	}
 
 	// ping once to ensure the database values and connection are valid and working
 	err = dbPool.Ping()
 	if err != nil {
-		log.Fatalf("Could not ping database: %s", err)
+		return nil, fmt.Errorf("could not ping database: %s", err)
 	}
 
 	return &PizzaOvenDbHandler{
 		db: dbPool,
-	}
+	}, nil
 }
 
 // GetRepositoryID queries the id of a repository based on its git URL
@@ -71,14 +69,14 @@ func (p PizzaOvenDbHandler) GetAuthorIDs(emails []string) (map[string]int, error
 
 	rows, err := p.db.Query("SELECT id, commit_author_email FROM commit_authors WHERE commit_author_email = ANY($1);", pq.Array(emails))
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("could not query: %s", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var id int
 		var email string
 		if err := rows.Scan(&id, &email); err != nil {
-			log.Fatal(err)
+			return nil, fmt.Errorf("could not scan id=%d: %s", id, err)
 		}
 		emailIDMap[email] = id
 	}
