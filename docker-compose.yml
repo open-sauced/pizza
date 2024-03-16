@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:15.3-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=pw
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready", "-U", "postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  migrate:
+    build: 
+      dockerfile: Migrate.Dockerfile
+      context: .
+    environment:
+      - POSTGRES_PASSWORD=pw
+    depends_on:
+      db:
+        condition: service_healthy
+  app:
+    image: golang:1.20-alpine
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: go run main.go -sslmode-disable -debug
+    environment:
+      - DATABASE_PORT=5432
+      - DATABASE_HOST=db
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=pw
+      - DATABASE_DBNAME=postgres
+      - SERVER_PORT=8080
+      - GIT_PROVIDER=cache
+      - CACHE_DIR=/tmp
+      - MIN_FREE_DISK_GB=25
